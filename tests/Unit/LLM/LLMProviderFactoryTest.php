@@ -13,7 +13,7 @@ class LLMProviderFactoryTest extends TestCase
     {
         $providers = LLMProviderFactory::availableProviders();
 
-        $this->assertContains('claude-haiku', $providers);
+        $this->assertContains('synthetic-kimi', $providers);
         $this->assertContains('claude-sonnet', $providers);
         $this->assertContains('openai-gpt4-mini', $providers);
     }

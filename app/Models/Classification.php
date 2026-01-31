@@ -45,17 +45,17 @@ class Classification extends Model
      */
     protected $fillable = [
         'post_id',
-        'haiku_verdict',
-        'haiku_confidence',
-        'haiku_category',
-        'haiku_reasoning',
+        'kimi_verdict',
+        'kimi_confidence',
+        'kimi_category',
+        'kimi_reasoning',
         'gpt_verdict',
         'gpt_confidence',
         'gpt_category',
         'gpt_reasoning',
         'combined_score',
         'final_decision',
-        'haiku_completed',
+        'kimi_completed',
         'gpt_completed',
         'classified_at',
     ];
@@ -66,10 +66,10 @@ class Classification extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'haiku_confidence' => 'float',
+        'kimi_confidence' => 'float',
         'gpt_confidence' => 'float',
         'combined_score' => 'float',
-        'haiku_completed' => 'boolean',
+        'kimi_completed' => 'boolean',
         'gpt_completed' => 'boolean',
         'classified_at' => 'datetime',
     ];
@@ -87,7 +87,7 @@ class Classification extends Model
      */
     public function isComplete(): bool
     {
-        return $this->haiku_completed && $this->gpt_completed;
+        return $this->kimi_completed && $this->gpt_completed;
     }
 
     /**
@@ -100,18 +100,18 @@ class Classification extends Model
 
     /**
      * Calculate the combined consensus score.
-     * Formula: (haiku_confidence × haiku_keep + gpt_confidence × gpt_keep) / 2
+     * Formula: (kimi_confidence × kimi_keep + gpt_confidence × gpt_keep) / 2
      */
     public static function calculateConsensusScore(
-        string $haikuVerdict,
-        float $haikuConfidence,
+        string $kimiVerdict,
+        float $kimiConfidence,
         string $gptVerdict,
         float $gptConfidence
     ): float {
-        $haikuKeep = $haikuVerdict === 'keep' ? 1 : 0;
+        $kimiKeep = $kimiVerdict === 'keep' ? 1 : 0;
         $gptKeep = $gptVerdict === 'keep' ? 1 : 0;
 
-        return ($haikuConfidence * $haikuKeep + $gptConfidence * $gptKeep) / 2;
+        return ($kimiConfidence * $kimiKeep + $gptConfidence * $gptKeep) / 2;
     }
 
     /**
@@ -137,24 +137,24 @@ class Classification extends Model
      * Check if shortcut rule applies (both models agree with high confidence).
      */
     public static function checkShortcutRule(
-        string $haikuVerdict,
-        float $haikuConfidence,
+        string $kimiVerdict,
+        float $kimiConfidence,
         string $gptVerdict,
         float $gptConfidence,
         float $shortcutThreshold = 0.8
     ): ?string {
         // Both skip with high confidence = DISCARD
         if (
-            $haikuVerdict === 'skip' && $gptVerdict === 'skip'
-            && $haikuConfidence > $shortcutThreshold && $gptConfidence > $shortcutThreshold
+            $kimiVerdict === 'skip' && $gptVerdict === 'skip'
+            && $kimiConfidence > $shortcutThreshold && $gptConfidence > $shortcutThreshold
         ) {
             return self::DECISION_DISCARD;
         }
 
         // Both keep with high confidence = KEEP
         if (
-            $haikuVerdict === 'keep' && $gptVerdict === 'keep'
-            && $haikuConfidence > $shortcutThreshold && $gptConfidence > $shortcutThreshold
+            $kimiVerdict === 'keep' && $gptVerdict === 'keep'
+            && $kimiConfidence > $shortcutThreshold && $gptConfidence > $shortcutThreshold
         ) {
             return self::DECISION_KEEP;
         }
@@ -173,8 +173,8 @@ class Classification extends Model
 
         // Check shortcut rules first
         $shortcutDecision = self::checkShortcutRule(
-            $this->haiku_verdict,
-            $this->haiku_confidence,
+            $this->kimi_verdict,
+            $this->kimi_confidence,
             $this->gpt_verdict,
             $this->gpt_confidence
         );
@@ -185,8 +185,8 @@ class Classification extends Model
         } else {
             // Calculate consensus score
             $this->combined_score = self::calculateConsensusScore(
-                $this->haiku_verdict,
-                $this->haiku_confidence,
+                $this->kimi_verdict,
+                $this->kimi_confidence,
                 $this->gpt_verdict,
                 $this->gpt_confidence
             );

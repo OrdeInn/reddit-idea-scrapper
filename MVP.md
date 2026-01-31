@@ -35,7 +35,7 @@ Solo developers and small teams (2-3 people) looking for validated SaaS ideas th
 |---------|-------------|
 | Manual subreddit scanning | User inputs subreddit name, triggers scan |
 | Incremental rescanning | First scan: 3 months. Rescan: 2 weeks + high-value post refresh |
-| Dual-gate classification | Haiku + GPT-4o-mini consensus filtering |
+| Dual-gate classification | Kimi + GPT-4o-mini consensus filtering |
 | Idea extraction & enrichment | Sonnet 4.5 full analysis |
 | Subreddit-scoped results | Ideas grouped by source subreddit |
 | Expandable row details | Collapsed summary, expand for full analysis |
@@ -79,7 +79,7 @@ Solo developers and small teams (2-3 people) looking for validated SaaS ideas th
 │   │   JOB 1         │      │   JOB 2         │      │   JOB 3         │ │
 │   │   FETCH         │ ───▶ │   CLASSIFY      │ ───▶ │   EXTRACT       │ │
 │   │                 │      │   (Dual-Gate)   │      │   (Sonnet 4.5)  │ │
-│   │   Reddit API    │      │   Haiku + GPT   │      │                 │ │
+│   │   Reddit API    │      │   Kimi + GPT    │      │                 │ │
 │   └─────────────────┘      └─────────────────┘      └─────────────────┘ │
 │            │                        │                        │           │
 │            ▼                        ▼                        ▼           │
@@ -99,7 +99,7 @@ Solo developers and small teams (2-3 people) looking for validated SaaS ideas th
 | Queue | Laravel Horizon + Redis |
 | Database | MySQL 8 |
 | Frontend | Livewire 3 + Alpine.js + Tailwind CSS |
-| LLM Providers | Claude (Haiku, Sonnet), OpenAI (GPT-4o-mini) |
+| LLM Providers | Kimi (K2.5), OpenAI (GPT-4o-mini), Anthropic (Sonnet 4.5) |
 | External API | Reddit API (OAuth) |
 
 ---
@@ -169,7 +169,7 @@ comments:
 
 **Models Used:**
 
-- Claude Haiku 3.5
+- Kimi K2.5
 - GPT-4o-mini
 
 **Process:**
@@ -204,7 +204,7 @@ Respond in JSON:
 **Consensus Logic:**
 
 ```
-score = (haiku_confidence × haiku_keep + gpt_confidence × gpt_keep) / 2
+score = (kimi_confidence × kimi_keep + gpt_confidence × gpt_keep) / 2
 
 where: keep = 1, skip = 0
 
@@ -224,16 +224,18 @@ Thresholds:
 ```
 classifications:
   - post_id (FK)
-  - haiku_verdict
-  - haiku_confidence
-  - haiku_category
-  - haiku_reasoning
+  - kimi_verdict
+  - kimi_confidence
+  - kimi_category
+  - kimi_reasoning
   - gpt_verdict
   - gpt_confidence
   - gpt_category
   - gpt_reasoning
   - combined_score
   - final_decision (keep | discard | borderline)
+  - kimi_completed
+  - gpt_completed
   - classified_at
 ```
 
@@ -377,7 +379,7 @@ ideas:
           ├─────────────┤  ├─────────────┤  ├─────────────┤
           │  id         │  │  id         │  │  id         │
           │  post_id    │  │  post_id    │  │  post_id    │
-          │  reddit_id  │  │  haiku_*    │  │  scan_id    │
+          │  reddit_id  │  │  kimi_*     │  │  scan_id    │
           │  parent_id  │  │  gpt_*      │  │  idea_title │
           │  body       │  │  combined_* │  │  scores     │
           │  author     │  │  final_dec  │  │  branding   │
@@ -547,7 +549,7 @@ class ExtractionResponse
 ```
 app/Services/LLM/
   ├── LLMProviderInterface.php
-  ├── ClaudeHaikuProvider.php
+  ├── SyntheticKimiProvider.php
   ├── ClaudeSonnetProvider.php
   ├── OpenAIGPT4MiniProvider.php
   └── LLMProviderFactory.php
@@ -559,7 +561,7 @@ app/Services/LLM/
 // config/llm.php
 return [
     'classification' => [
-        'providers' => ['claude-haiku', 'openai-gpt4-mini'],
+        'providers' => ['synthetic-kimi', 'openai-gpt4-mini'],
         'consensus_threshold_keep' => 0.6,
         'consensus_threshold_discard' => 0.4,
     ],
@@ -567,10 +569,10 @@ return [
         'provider' => 'claude-sonnet',
     ],
     'providers' => [
-        'claude-haiku' => [
-            'class' => ClaudeHaikuProvider::class,
-            'api_key' => env('ANTHROPIC_API_KEY'),
-            'model' => 'claude-3-5-haiku-20241022',
+        'synthetic-kimi' => [
+            'class' => SyntheticKimiProvider::class,
+            'api_key' => env('SYNTHETIC_API_KEY'),
+            'model' => 'hf:moonshotai/Kimi-K2.5',
         ],
         'claude-sonnet' => [
             'class' => ClaudeSonnetProvider::class,
@@ -672,7 +674,7 @@ class RedditService
 **Goal:** Dual-gate classification working
 
 - [ ] LLM abstraction interface
-- [ ] Claude Haiku provider implementation
+- [ ] Kimi provider implementation
 - [ ] GPT-4o-mini provider implementation
 - [ ] Classification job (runs both models)
 - [ ] Consensus logic implementation
@@ -729,7 +731,7 @@ class RedditService
 
 | Step | Model | Est. Tokens | Cost |
 |------|-------|-------------|------|
-| Classification | Haiku | ~1.5M input | ~$0.30 |
+| Classification | Kimi | ~1.5M input | ~$0.30 |
 | Classification | GPT-4o-mini | ~1.5M input | ~$0.25 |
 | Extraction | Sonnet 4.5 | ~600K input, 200K output | ~$8-10 |
 | **Total** | | | **~$9-11** |
