@@ -17,11 +17,31 @@ class ClassificationResponse
      */
     public static function fromJson(array $json, array $rawResponse = []): self
     {
+        // Coerce verdict to string to avoid TypeError on non-string values
+        $verdictInput = $json['verdict'] ?? 'skip';
+        $verdict = is_string($verdictInput) ? strtolower($verdictInput) : 'skip';
+
+        // Normalize verdict to only allow 'keep' or 'skip'
+        if (! in_array($verdict, ['keep', 'skip'], true)) {
+            $verdict = 'skip';
+        }
+
+        // Clamp confidence to [0, 1] range
+        $confidence = (float) ($json['confidence'] ?? 0.0);
+        $confidence = min(1.0, max(0.0, $confidence));
+
+        // Coerce category and reasoning to string to avoid TypeError
+        $category = $json['category'] ?? 'other';
+        $category = is_string($category) ? $category : 'other';
+
+        $reasoning = $json['reasoning'] ?? '';
+        $reasoning = is_string($reasoning) ? $reasoning : '';
+
         return new self(
-            verdict: strtolower($json['verdict'] ?? 'skip'),
-            confidence: (float) ($json['confidence'] ?? 0.0),
-            category: $json['category'] ?? 'other',
-            reasoning: $json['reasoning'] ?? '',
+            verdict: $verdict,
+            confidence: $confidence,
+            category: $category,
+            reasoning: $reasoning,
             rawResponse: $rawResponse,
         );
     }
