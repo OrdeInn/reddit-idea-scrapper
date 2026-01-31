@@ -13,7 +13,7 @@ return [
 
     'classification' => [
         // Which providers to use for classification (both run in parallel)
-        'providers' => ['claude-haiku', 'openai-gpt4-mini'],
+        'providers' => ['synthetic-kimi', 'openai-gpt4-mini'],
 
         // Consensus score thresholds
         // score = (model1_confidence × model1_keep + model2_confidence × model2_keep) / 2
@@ -72,6 +72,14 @@ return [
             'class' => App\Services\LLM\OpenAIGPT4MiniProvider::class,
             'api_key' => env('OPENAI_API_KEY', ''),
             'model' => 'gpt-4o-mini',
+            'max_tokens' => 1024,
+            'temperature' => 0.3,
+        ],
+
+        'synthetic-kimi' => [
+            'class' => App\Services\LLM\SyntheticKimiProvider::class,
+            'api_key' => env('SYNTHETIC_API_KEY', ''),
+            'model' => 'hf:moonshotai/Kimi-K2.5',
             'max_tokens' => 1024,
             'temperature' => 0.3,
         ],
