@@ -63,6 +63,10 @@ class CheckFetchCompleteJob implements ShouldQueue
                 'scan_id' => $scan->id,
             ]);
             $scan->updateStatus(Scan::STATUS_CLASSIFYING);
+
+            // Dispatch classification jobs to trigger completion check
+            ClassifyPostsJob::dispatch($scan)->onQueue('classify');
+
             return;
         }
 
@@ -90,12 +94,10 @@ class CheckFetchCompleteJob implements ShouldQueue
         // All fetch jobs complete, transition to classification
         $scan->updateStatus(Scan::STATUS_CLASSIFYING);
 
-        // TODO: Dispatch ClassifyPostsJob when it is implemented
-        // ClassifyPostsJob::dispatch($scan)->onQueue('classify');
+        // Dispatch classification jobs
+        ClassifyPostsJob::dispatch($scan)->onQueue('classify');
 
-        // For now, log that classification is not yet implemented
-        // Note: We do NOT mark as completed here - that should happen after classification
-        Log::info('Classification not yet implemented. Scan left in classifying state.', [
+        Log::info('Dispatched ClassifyPostsJob to start classification', [
             'scan_id' => $scan->id,
         ]);
     }

@@ -2,6 +2,8 @@
 
 namespace App\Services\LLM;
 
+use App\Exceptions\PermanentClassificationException;
+use App\Exceptions\TransientClassificationException;
 use App\Services\LLM\DTOs\ClassificationRequest;
 use App\Services\LLM\DTOs\ClassificationResponse;
 use App\Services\LLM\DTOs\ExtractionRequest;
@@ -80,12 +82,10 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
                 'model' => $this->model,
             ]);
 
-            return new ClassificationResponse(
-                verdict: 'skip',
-                confidence: 0.0,
-                category: 'network-error',
-                reasoning: 'Failed to connect to API',
-                rawResponse: [],
+            throw new TransientClassificationException(
+                message: "Failed to connect to OpenAI API",
+                provider: $this->getProviderName(),
+                previous: $e
             );
         }
 
@@ -100,7 +100,20 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
                 'model' => $this->model,
             ]);
 
-            throw new RuntimeException("OpenAI API error ({$status}): {$error}");
+            // Determine if error is transient or permanent
+            if ($status >= 500 || $status === 429) {
+                // Server errors and rate limiting - transient
+                throw new TransientClassificationException(
+                    message: "OpenAI API returned status {$status}",
+                    provider: $this->getProviderName()
+                );
+            }
+
+            // 4xx errors (except 429) - permanent
+            throw new PermanentClassificationException(
+                message: "OpenAI API returned status {$status}",
+                provider: $this->getProviderName()
+            );
         }
 
         $data = $response->json();
@@ -112,12 +125,9 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
                 'model' => $this->model,
             ]);
 
-            return new ClassificationResponse(
-                verdict: 'skip',
-                confidence: 0.0,
-                category: 'invalid-response',
-                reasoning: 'API returned invalid response format',
-                rawResponse: ['body' => substr($response->body(), 0, 1000)],
+            throw new PermanentClassificationException(
+                message: "OpenAI API returned invalid JSON response",
+                provider: $this->getProviderName()
             );
         }
 
@@ -168,12 +178,9 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
                 'model' => $this->model,
             ]);
 
-            return new ClassificationResponse(
-                verdict: 'skip',
-                confidence: 0.0,
-                category: 'parse-error',
-                reasoning: 'Failed to parse model response',
-                rawResponse: $rawResponse,
+            throw new PermanentClassificationException(
+                message: "Failed to parse OpenAI API response",
+                provider: $this->getProviderName()
             );
         }
 

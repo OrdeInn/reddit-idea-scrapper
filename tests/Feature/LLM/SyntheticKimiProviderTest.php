@@ -114,12 +114,11 @@ class SyntheticKimiProviderTest extends TestCase
             subreddit: 'test',
         );
 
-        $response = $provider->classify($request);
+        // Now throws PermanentClassificationException instead of returning error response
+        $this->expectException(\App\Exceptions\PermanentClassificationException::class);
+        $this->expectExceptionMessage('Failed to parse Synthetic API response');
 
-        $this->assertTrue($response->isSkip());
-        $this->assertEquals('skip', $response->verdict);
-        $this->assertEquals(0.0, $response->confidence);
-        $this->assertEquals('parse-error', $response->category);
+        $provider->classify($request);
     }
 
     public function test_handles_content_filter(): void
@@ -328,8 +327,9 @@ class SyntheticKimiProviderTest extends TestCase
             subreddit: 'test',
         );
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('Synthetic API error (401)');
+        // 401 is a 4xx error (permanent), not transient
+        $this->expectException(\App\Exceptions\PermanentClassificationException::class);
+        $this->expectExceptionMessage('Synthetic API returned status 401');
 
         $provider->classify($request);
     }
@@ -657,12 +657,11 @@ class SyntheticKimiProviderTest extends TestCase
             subreddit: 'test',
         );
 
-        $response = $provider->classify($request);
+        // Connection errors are transient - should throw TransientClassificationException
+        $this->expectException(\App\Exceptions\TransientClassificationException::class);
+        $this->expectExceptionMessage('Failed to connect to Synthetic API');
 
-        $this->assertTrue($response->isSkip());
-        $this->assertEquals('skip', $response->verdict);
-        $this->assertEquals('network-error', $response->category);
-        $this->assertEquals('Failed to connect to API', $response->reasoning);
+        $provider->classify($request);
     }
 
     public function test_handles_invalid_json_response(): void
@@ -684,11 +683,10 @@ class SyntheticKimiProviderTest extends TestCase
             subreddit: 'test',
         );
 
-        $response = $provider->classify($request);
+        // Invalid JSON response is a permanent error
+        $this->expectException(\App\Exceptions\PermanentClassificationException::class);
+        $this->expectExceptionMessage('Synthetic API returned invalid JSON response');
 
-        $this->assertTrue($response->isSkip());
-        $this->assertEquals('skip', $response->verdict);
-        $this->assertEquals('invalid-response', $response->category);
-        $this->assertEquals('API returned invalid response format', $response->reasoning);
+        $provider->classify($request);
     }
 }
