@@ -35,6 +35,10 @@ return new class extends Migration
             // Checkpoint for resumable scans (stores Reddit's 'after' cursor)
             $table->string('checkpoint')->nullable();
 
+            // Comment job tracking for completion detection (works with any queue driver)
+            $table->unsignedInteger('comment_jobs_total')->nullable();
+            $table->unsignedInteger('comment_jobs_done')->default(0);
+
             // Timing
             $table->timestamp('started_at')->nullable();
             $table->timestamp('completed_at')->nullable();

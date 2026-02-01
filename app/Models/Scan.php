@@ -50,6 +50,8 @@ class Scan extends Model
         'posts_extracted',
         'ideas_found',
         'checkpoint',
+        'comment_jobs_total',
+        'comment_jobs_done',
         'started_at',
         'completed_at',
     ];
@@ -68,6 +70,8 @@ class Scan extends Model
         'posts_classified' => 'integer',
         'posts_extracted' => 'integer',
         'ideas_found' => 'integer',
+        'comment_jobs_total' => 'integer',
+        'comment_jobs_done' => 'integer',
     ];
 
     /**
