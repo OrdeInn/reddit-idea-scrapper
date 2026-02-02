@@ -59,7 +59,7 @@ class Subreddit extends Model
     public function latestCompletedScan(): ?Scan
     {
         return $this->scans()
-            ->where('status', 'completed')
+            ->where('status', Scan::STATUS_COMPLETED)
             ->latest('completed_at')
             ->first();
     }
@@ -70,7 +70,7 @@ class Subreddit extends Model
     public function activeScan(): ?Scan
     {
         return $this->scans()
-            ->whereNotIn('status', ['completed', 'failed'])
+            ->whereNotIn('status', [Scan::STATUS_COMPLETED, Scan::STATUS_FAILED])
             ->latest()
             ->first();
     }
