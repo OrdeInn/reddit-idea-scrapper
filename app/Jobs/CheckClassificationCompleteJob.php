@@ -106,10 +106,9 @@ class CheckClassificationCompleteJob implements ShouldQueue
     {
         $scan->updateStatus(Scan::STATUS_EXTRACTING);
 
-        // TODO: Dispatch ExtractIdeasJob when implemented
-        // ExtractIdeasJob::dispatch($scan)->onQueue('extract');
+        ExtractIdeasJob::dispatch($scan)->onQueue('extract');
 
-        Log::info('Extraction not yet implemented. Scan left in extracting state.', [
+        Log::info('Transitioned to extracting, dispatched ExtractIdeasJob', [
             'scan_id' => $scan->id,
         ]);
     }

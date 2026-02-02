@@ -38,6 +38,7 @@ class Post extends Model
         'is_spoiler',
         'reddit_created_at',
         'fetched_at',
+        'extracted_at',
     ];
 
     /**
@@ -55,6 +56,7 @@ class Post extends Model
         'is_spoiler' => 'boolean',
         'reddit_created_at' => 'datetime',
         'fetched_at' => 'datetime',
+        'extracted_at' => 'datetime',
     ];
 
     /**
@@ -162,6 +164,30 @@ class Post extends Model
     {
         return $query->whereHas('classification', function ($q) {
             $q->whereIn('final_decision', ['keep', 'borderline']);
-        })->whereDoesntHave('ideas');
+        })->whereNull('extracted_at');
+    }
+
+    /**
+     * Scope for posts that have been extracted.
+     */
+    public function scopeExtracted(Builder $query)
+    {
+        return $query->whereNotNull('extracted_at');
+    }
+
+    /**
+     * Check if the post has been extracted.
+     */
+    public function isExtracted(): bool
+    {
+        return $this->extracted_at !== null;
+    }
+
+    /**
+     * Mark the post as extracted.
+     */
+    public function markAsExtracted(): void
+    {
+        $this->forceFill(['extracted_at' => now()])->save();
     }
 }
