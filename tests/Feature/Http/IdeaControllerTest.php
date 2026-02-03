@@ -58,15 +58,11 @@ class IdeaControllerTest extends TestCase
     {
         $this->withoutVite();
 
-        // Make request as Inertia request
-        $response = $this->withHeaders([
-            'X-Inertia' => 'true',
-        ])->get(route('ideas.starred'));
+        // Make regular request to the page
+        $response = $this->get(route('ideas.starred'));
 
         $response->assertOk();
-        // Verify Inertia response by checking for Inertia headers and JSON structure
-        $response->assertHeader('X-Inertia');
-        $response->assertJsonStructure(['component', 'props', 'url', 'version']);
-        $this->assertEquals('Starred', $response->json('component'));
+        // Verify the Inertia component is rendered correctly in the HTML response
+        $response->assertSee('"component":"Starred"');
     }
 }

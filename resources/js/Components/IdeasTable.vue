@@ -9,6 +9,11 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    mode: {
+        type: String,
+        validator: (v) => ['subreddit', 'starred'].includes(v),
+        default: 'subreddit',
+    },
 })
 
 const ideas = ref([])
@@ -16,14 +21,16 @@ const loading = ref(true)
 const pagination = ref({})
 const expandedId = ref(null)
 
-const filters = ref({
+const getDefaultFilters = () => ({
     min_score: 1,
     min_complexity: 1,
     starred_only: false,
     include_borderline: true,
-    sort_by: 'score_overall',
+    sort_by: props.mode === 'starred' ? 'starred_at' : 'score_overall',
     sort_dir: 'desc',
 })
+
+const filters = ref(getDefaultFilters())
 
 const fetchIdeas = async (page = 1) => {
     loading.value = true
@@ -34,9 +41,9 @@ const fetchIdeas = async (page = 1) => {
         per_page: 20,
     })
 
-    const url = props.subredditId
-        ? `/subreddits/${props.subredditId}/ideas?${params}`
-        : `/api/starred?${params}`
+    const url = props.mode === 'starred'
+        ? `/api/starred?${params}`
+        : `/subreddits/${props.subredditId}/ideas?${params}`
 
     try {
         const response = await fetch(url, {
@@ -90,6 +97,16 @@ const handleStarToggle = async (idea) => {
         const data = await response.json()
         idea.is_starred = data.is_starred
         idea.starred_at = data.starred_at
+
+        // Refetch on starred page when unstarring to ensure pagination stays correct
+        if (props.mode === 'starred' && !idea.is_starred) {
+            const currentPage = pagination.value.current_page || 1
+            await fetchIdeas(currentPage)
+            // If we land on an empty page and not on page 1, try the previous page
+            if (ideas.value.length === 0 && currentPage > 1) {
+                await fetchIdeas(currentPage - 1)
+            }
+        }
     } catch (error) {
         console.error('Failed to toggle star:', error)
     }
@@ -103,6 +120,13 @@ onMounted(() => {
     fetchIdeas()
 })
 
+// Reset filters and refetch when mode changes
+watch(() => props.mode, () => {
+    filters.value = getDefaultFilters()
+    fetchIdeas()
+})
+
+// Refetch when subredditId changes
 watch(() => props.subredditId, () => {
     fetchIdeas()
 })

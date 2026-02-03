@@ -84,8 +84,30 @@ class IdeaController extends Controller
             ->with([
                 'post:id,reddit_id,title,permalink,upvotes,num_comments,subreddit_id',
                 'post.subreddit:id,name',
-            ])
-            ->sortBy($validated['sort_by'] ?? 'starred_at', $validated['sort_dir'] ?? 'desc');
+            ]);
+
+        // Apply filters (same as subreddit listing)
+        if (isset($validated['min_score'])) {
+            $query->minScore($validated['min_score']);
+        }
+
+        if (isset($validated['min_complexity'])) {
+            $query->minComplexity($validated['min_complexity']);
+        }
+
+        // Only exclude borderline when explicitly set to false
+        if (($validated['include_borderline'] ?? true) === false) {
+            $query->includeBorderline(false);
+        }
+
+        if (! empty($validated['date_from']) && ! empty($validated['date_to'])) {
+            $query->createdBetween($validated['date_from'], $validated['date_to']);
+        }
+
+        // Apply sorting
+        $sortBy = $validated['sort_by'] ?? 'starred_at';
+        $sortDir = $validated['sort_dir'] ?? 'desc';
+        $query->sortBy($sortBy, $sortDir);
 
         $perPage = $validated['per_page'] ?? 20;
         $ideas = $query->paginate($perPage);
