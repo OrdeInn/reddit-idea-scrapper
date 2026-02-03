@@ -1,0 +1,78 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Requests\StoreSubredditRequest;
+use App\Models\Subreddit;
+use App\Services\ScanService;
+use Illuminate\Http\RedirectResponse;
+use Inertia\Inertia;
+use Inertia\Response;
+use Illuminate\Support\Str;
+
+class SubredditController extends Controller
+{
+    public function __construct(
+        private ScanService $scanService,
+    ) {}
+
+    /**
+     * Display the subreddit detail page with ideas.
+     */
+    public function show(Subreddit $subreddit): Response
+    {
+        $subreddit->load(['scans' => fn($q) => $q->latest()->limit(5)]);
+
+        $status = $this->scanService->getSubredditStatus($subreddit);
+
+        return Inertia::render('Subreddit/Show', [
+            'subreddit' => [
+                'id' => $subreddit->id,
+                'name' => $subreddit->name,
+                'full_name' => $subreddit->full_name,
+                'last_scanned_at' => $subreddit->last_scanned_at?->toIso8601String(),
+                'last_scanned_human' => $subreddit->last_scanned_at?->diffForHumans(),
+            ],
+            'status' => $status,
+            'recentScans' => $subreddit->scans->map(fn($s) => [
+                'id' => $s->id,
+                'scan_type' => $s->scan_type,
+                'status' => $s->status,
+                'ideas_found' => $s->ideas_found,
+                'completed_at' => $s->completed_at?->toIso8601String(),
+            ]),
+        ]);
+    }
+
+    /**
+     * Store a new subreddit.
+     */
+    public function store(StoreSubredditRequest $request): RedirectResponse
+    {
+        $name = $request->validated()['name'];
+
+        // Normalize: trim, lowercase, remove r/ prefix
+        $name = Str::of($name)
+            ->trim()
+            ->lower()
+            ->replaceStart('r/', '')
+            ->toString();
+
+        $subreddit = Subreddit::firstOrCreate(['name' => $name]);
+
+        return redirect()->route('subreddit.show', $subreddit)
+            ->with('success', "Added r/{$subreddit->name}");
+    }
+
+    /**
+     * Delete a subreddit.
+     */
+    public function destroy(Subreddit $subreddit): RedirectResponse
+    {
+        $name = $subreddit->name;
+        $subreddit->delete();
+
+        return redirect()->route('dashboard')
+            ->with('success', "Removed r/{$name}");
+    }
+}
