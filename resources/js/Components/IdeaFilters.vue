@@ -2,7 +2,10 @@
 import { ref, watch } from 'vue'
 
 const props = defineProps({
-    filters: Object,
+    filters: {
+        type: Object,
+        required: true,
+    },
 })
 
 const emit = defineEmits(['change'])
@@ -15,7 +18,7 @@ watch(() => props.filters, (newFilters) => {
 
 const handleFilterChange = (key, value) => {
     localFilters.value[key] = value
-    emit('change', localFilters.value)
+    emit('change', { ...localFilters.value })
 }
 
 const resetFilters = () => {
@@ -27,7 +30,7 @@ const resetFilters = () => {
         sort_by: 'score_overall',
         sort_dir: 'desc',
     }
-    emit('change', localFilters.value)
+    emit('change', { ...localFilters.value })
 }
 </script>
 
@@ -52,20 +55,19 @@ const resetFilters = () => {
                 </select>
             </div>
 
-            <!-- Min Complexity -->
+            <!-- Min Complexity / Buildability -->
             <div>
-                <label for="min-complexity" class="block text-sm font-medium text-gray-700 mb-1">Min Complexity</label>
+                <label for="min-complexity" class="block text-sm font-medium text-gray-700 mb-1">Buildability</label>
                 <select
                     id="min-complexity"
                     :value="localFilters.min_complexity"
                     @change="handleFilterChange('min_complexity', parseInt($event.target.value, 10))"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 >
-                    <option value="1">1+</option>
-                    <option value="2">2+</option>
-                    <option value="3">3+</option>
-                    <option value="4">4+</option>
-                    <option value="5">5+</option>
+                    <option value="1">Any</option>
+                    <option value="2">2+ (Medium)</option>
+                    <option value="3">3+ (Easy)</option>
+                    <option value="4">4+ (Very Easy)</option>
                 </select>
             </div>
 
@@ -115,22 +117,33 @@ const resetFilters = () => {
                 </select>
             </div>
 
-            <!-- Sort Direction -->
+            <!-- Sort Direction Toggle -->
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Direction</label>
-                <select
-                    :value="localFilters.sort_dir"
-                    @change="handleFilterChange('sort_dir', $event.target.value)"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                <button
+                    type="button"
+                    @click="handleFilterChange('sort_dir', localFilters.sort_dir === 'desc' ? 'asc' : 'desc')"
+                    class="p-2 rounded text-gray-500 hover:text-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                    :aria-label="`Sort direction: ${localFilters.sort_dir === 'desc' ? 'descending' : 'ascending'}`"
+                    :aria-pressed="localFilters.sort_dir === 'asc'"
+                    :title="localFilters.sort_dir === 'desc' ? 'Descending' : 'Ascending'"
                 >
-                    <option value="desc">Descending</option>
-                    <option value="asc">Ascending</option>
-                </select>
+                    <svg
+                        class="w-4 h-4 transition-transform"
+                        :class="{ 'rotate-180': localFilters.sort_dir === 'asc' }"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                    >
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
             </div>
 
             <!-- Reset Button -->
             <div>
                 <button
+                    type="button"
                     @click="resetFilters"
                     class="w-full px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 >
