@@ -31,12 +31,12 @@ class IdeaController extends Controller
             $query->minComplexity($validated['min_complexity']);
         }
 
-        if (! empty($validated['starred_only'])) {
+        if (($validated['starred_only'] ?? false) === true) {
             $query->starred();
         }
 
         // Only exclude borderline when explicitly set to false
-        if (isset($validated['include_borderline']) && $validated['include_borderline'] === false) {
+        if (($validated['include_borderline'] ?? true) === false) {
             $query->includeBorderline(false);
         }
 

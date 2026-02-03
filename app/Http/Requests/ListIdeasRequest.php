@@ -37,6 +37,16 @@ class ListIdeasRequest extends FormRequest
 
     protected function passedValidation(): void
     {
+        // Normalize boolean fields from string to actual boolean
+        if ($this->has('starred_only')) {
+            $this->merge(['starred_only' => filter_var($this->input('starred_only'), FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? false]);
+        }
+
+        // include_borderline defaults to true (include by default)
+        if ($this->has('include_borderline')) {
+            $this->merge(['include_borderline' => filter_var($this->input('include_borderline'), FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? true]);
+        }
+
         // Normalize per_page to integer
         if ($this->has('per_page')) {
             $this->merge(['per_page' => (int) $this->input('per_page')]);
