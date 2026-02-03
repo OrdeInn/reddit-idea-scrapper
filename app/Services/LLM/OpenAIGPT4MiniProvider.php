@@ -91,11 +91,15 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
 
         if ($response->failed()) {
             $status = $response->status();
-            $error = $response->json('error.message') ?? $response->body();
+            $body = $response->body();
+            $error = $response->json('error.message') ?? $body;
 
             Log::error('OpenAI API error', [
                 'status' => $status,
                 'error' => $error,
+                'body_length' => strlen($body),
+                'body_sha256' => hash('sha256', $body),
+                'body_snippet' => $this->shouldIncludeSensitiveLogData() ? substr($body, 0, 200) : null,
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
             ]);
@@ -123,6 +127,10 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
             Log::warning('OpenAI API returned invalid JSON response', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
+                'status' => $response->status(),
+                'body_length' => strlen($response->body()),
+                'body_sha256' => hash('sha256', $response->body()),
+                'body_snippet' => $this->shouldIncludeSensitiveLogData() ? substr($response->body(), 0, 200) : null,
             ]);
 
             throw new PermanentClassificationException(
@@ -151,20 +159,18 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
         }
 
         // Extract content from response
-        $content = $data['choices'][0]['message']['content'] ?? '';
+        $contentRaw = $data['choices'][0]['message']['content'] ?? null;
+        $content = $this->normalizeMessageContent($contentRaw);
 
-        if (empty($content)) {
+        if ($content === '') {
             Log::warning('OpenAI API returned empty content', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
             ]);
 
-            return new ClassificationResponse(
-                verdict: 'skip',
-                confidence: 0.0,
-                category: 'error',
-                reasoning: 'API returned empty response',
-                rawResponse: $rawResponse,
+            throw new TransientClassificationException(
+                message: 'OpenAI API returned empty content',
+                provider: $this->getProviderName()
             );
         }
 

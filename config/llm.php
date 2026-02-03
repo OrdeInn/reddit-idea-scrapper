@@ -98,4 +98,22 @@ return [
         'connect' => 30,        // Connection timeout in seconds
         'request' => 120,       // Request timeout in seconds (extraction can be slow)
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Retry Settings
+    |--------------------------------------------------------------------------
+    |
+    | Conservative HTTP retry defaults for transient provider/network failures.
+    | Snippets in logs are disabled by default outside local/testing.
+    |
+    */
+
+    'retry' => [
+        'max_attempts' => 3,          // Total attempts (initial + retries)
+        'base_delay_ms' => 250,       // Exponential backoff base delay
+        'max_delay_ms' => 15000,      // Cap backoff (and Retry-After) to this
+        'jitter_ms' => 100,           // Random +/- jitter to avoid thundering herd
+        'honor_retry_after' => true,  // If 429 includes Retry-After, respect it (within max_delay_ms)
+    ],
 ];

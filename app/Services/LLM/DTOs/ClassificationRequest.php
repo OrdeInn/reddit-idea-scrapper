@@ -63,6 +63,12 @@ class ClassificationRequest
         return <<<PROMPT
 Analyze this Reddit post and its comments. Determine if it contains a genuine problem, pain point, or tool request that could inspire a SaaS product idea suitable for solo developers or small teams.
 
+Decision rules:
+- Default to "skip" unless there's a clear, specific pain point or an explicit request for a tool to solve it.
+- "keep" is ONLY allowed for category "genuine-problem" or "tool-request".
+- If category is "advice-thread", "spam", "self-promo", "rant-no-solution", "meme-joke", or "other", verdict MUST be "skip".
+- If unsure, choose "skip" with low confidence.
+
 POST:
 Subreddit: r/{$this->subreddit}
 Title: {$this->postTitle}

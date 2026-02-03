@@ -467,12 +467,11 @@ class SyntheticKimiProviderTest extends TestCase
             subreddit: 'test',
         );
 
-        $response = $provider->classify($request);
+        // Empty content is treated as a transient provider failure
+        $this->expectException(\App\Exceptions\TransientClassificationException::class);
+        $this->expectExceptionMessage('Synthetic API returned empty content');
 
-        $this->assertTrue($response->isSkip());
-        $this->assertEquals('skip', $response->verdict);
-        $this->assertEquals('error', $response->category);
-        $this->assertStringContainsString('empty', $response->reasoning);
+        $provider->classify($request);
     }
 
     public function test_get_model_name_returns_configured_model(): void

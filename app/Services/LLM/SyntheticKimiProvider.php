@@ -57,24 +57,25 @@ class SyntheticKimiProvider extends BaseLLMProvider
      */
     public function classify(ClassificationRequest $request): ClassificationResponse
     {
+        $payload = [
+            'model' => $this->model,
+            'max_tokens' => $this->maxTokens,
+            'temperature' => $this->temperature,
+            'response_format' => ['type' => 'json_object'],
+            'messages' => [
+                [
+                    'role' => 'system',
+                    'content' => 'You are a classification assistant. Analyze Reddit posts and classify them as potential SaaS idea sources. Respond only in JSON format.',
+                ],
+                [
+                    'role' => 'user',
+                    'content' => $request->getPromptContent(),
+                ],
+            ],
+        ];
+
         try {
-            $response = $this->client()
-                ->post($this->getApiUrl(), [
-                    'model' => $this->model,
-                    'max_tokens' => $this->maxTokens,
-                    'temperature' => $this->temperature,
-                    'response_format' => ['type' => 'json_object'],
-                    'messages' => [
-                        [
-                            'role' => 'system',
-                            'content' => 'You are a classification assistant. Analyze Reddit posts and classify them as potential SaaS idea sources. Respond only in JSON format.',
-                        ],
-                        [
-                            'role' => 'user',
-                            'content' => $request->getPromptContent(),
-                        ],
-                    ],
-                ]);
+            $response = $this->client()->post($this->getApiUrl(), $payload);
         } catch (ConnectionException $e) {
             Log::error('Synthetic API connection error', [
                 'error' => $e->getMessage(),
@@ -83,7 +84,7 @@ class SyntheticKimiProvider extends BaseLLMProvider
             ]);
 
             throw new TransientClassificationException(
-                message: "Failed to connect to Synthetic API",
+                message: 'Failed to connect to Synthetic API',
                 provider: $this->getProviderName(),
                 previous: $e
             );
@@ -91,11 +92,15 @@ class SyntheticKimiProvider extends BaseLLMProvider
 
         if ($response->failed()) {
             $status = $response->status();
-            $error = $response->json('error.message') ?? $response->body();
+            $body = $response->body();
+            $error = $response->json('error.message') ?? $body;
 
             Log::error('Synthetic API error', [
                 'status' => $status,
                 'error' => $error,
+                'body_length' => strlen($body),
+                'body_sha256' => hash('sha256', $body),
+                'body_snippet' => $this->shouldIncludeSensitiveLogData() ? substr($body, 0, 200) : null,
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
             ]);
@@ -123,6 +128,10 @@ class SyntheticKimiProvider extends BaseLLMProvider
             Log::warning('Synthetic API returned invalid JSON response', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
+                'status' => $response->status(),
+                'body_length' => strlen($response->body()),
+                'body_sha256' => hash('sha256', $response->body()),
+                'body_snippet' => $this->shouldIncludeSensitiveLogData() ? substr($response->body(), 0, 200) : null,
             ]);
 
             throw new PermanentClassificationException(
@@ -151,20 +160,18 @@ class SyntheticKimiProvider extends BaseLLMProvider
         }
 
         // Extract content from response
-        $content = $data['choices'][0]['message']['content'] ?? '';
+        $contentRaw = $data['choices'][0]['message']['content'] ?? null;
+        $content = $this->normalizeMessageContent($contentRaw);
 
-        if (empty($content)) {
+        if ($content === '') {
             Log::warning('Synthetic API returned empty content', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
             ]);
 
-            return new ClassificationResponse(
-                verdict: 'skip',
-                confidence: 0.0,
-                category: 'error',
-                reasoning: 'API returned empty response',
-                rawResponse: $rawResponse,
+            throw new TransientClassificationException(
+                message: 'Synthetic API returned empty content',
+                provider: $this->getProviderName()
             );
         }
 
