@@ -52,13 +52,13 @@ return [
     */
 
     'providers' => [
-        'claude-haiku' => [
-            'class' => App\Services\LLM\ClaudeHaikuProvider::class,
-            'api_key' => env('ANTHROPIC_API_KEY', ''),
-            'model' => 'claude-3-5-haiku-20241022',
-            'max_tokens' => 1024,
-            'temperature' => 0.3,
-        ],
+        // 'claude-haiku' => [
+        //     'class' => App\Services\LLM\ClaudeHaikuProvider::class,
+        //     'api_key' => env('ANTHROPIC_API_KEY', ''),
+        //     'model' => 'claude-3-5-haiku-20241022',
+        //     'max_tokens' => 1024,
+        //     'temperature' => 0.3,
+        // ],
 
         'claude-sonnet' => [
             'class' => App\Services\LLM\ClaudeSonnetProvider::class,
@@ -95,7 +95,7 @@ return [
     */
 
     'timeouts' => [
-        'connect' => 10,        // Connection timeout in seconds
+        'connect' => 30,        // Connection timeout in seconds
         'request' => 120,       // Request timeout in seconds (extraction can be slow)
     ],
 ];
