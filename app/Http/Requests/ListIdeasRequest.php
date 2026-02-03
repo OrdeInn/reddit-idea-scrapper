@@ -35,21 +35,25 @@ class ListIdeasRequest extends FormRequest
         ];
     }
 
-    protected function passedValidation(): void
+    protected function prepareForValidation(): void
     {
-        // Normalize boolean fields from string to actual boolean
-        if ($this->has('starred_only')) {
-            $this->merge(['starred_only' => filter_var($this->input('starred_only'), FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? false]);
-        }
+        // URL query params come in as strings, but the validator's `boolean`
+        // rule does not accept "true"/"false". Normalize to actual booleans
+        // before validation.
+        foreach (['starred_only', 'include_borderline'] as $key) {
+            if (! $this->has($key)) {
+                continue;
+            }
 
-        // include_borderline defaults to true (include by default)
-        if ($this->has('include_borderline')) {
-            $this->merge(['include_borderline' => filter_var($this->input('include_borderline'), FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? true]);
-        }
+            $raw = $this->input($key);
+            if (is_bool($raw)) {
+                continue;
+            }
 
-        // Normalize per_page to integer
-        if ($this->has('per_page')) {
-            $this->merge(['per_page' => (int) $this->input('per_page')]);
+            $parsed = filter_var($raw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if ($parsed !== null) {
+                $this->merge([$key => $parsed]);
+            }
         }
 
         // Normalize sort_dir to lowercase
