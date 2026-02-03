@@ -21,8 +21,6 @@ class SubredditController extends Controller
      */
     public function show(Subreddit $subreddit): Response
     {
-        $subreddit->load(['scans' => fn($q) => $q->latest()->limit(5)]);
-
         $status = $this->scanService->getSubredditStatus($subreddit);
 
         return Inertia::render('Subreddit/Show', [
@@ -34,13 +32,6 @@ class SubredditController extends Controller
                 'last_scanned_human' => $subreddit->last_scanned_at?->diffForHumans(),
             ],
             'status' => $status,
-            'recentScans' => $subreddit->scans->map(fn($s) => [
-                'id' => $s->id,
-                'scan_type' => $s->scan_type,
-                'status' => $s->status,
-                'ideas_found' => $s->ideas_found,
-                'completed_at' => $s->completed_at?->toIso8601String(),
-            ]),
         ]);
     }
 
