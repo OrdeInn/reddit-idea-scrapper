@@ -57,7 +57,7 @@ class ExtractPostIdeasJob implements ShouldQueue
     /**
      * Execute the job.
      */
-    public function handle(): void
+    public function handle(LLMProviderFactory $providerFactory): void
     {
         $scan = $this->scan->fresh();
         $post = $this->post->fresh();
@@ -117,7 +117,7 @@ class ExtractPostIdeasJob implements ShouldQueue
             $request = ExtractionRequest::fromPost($post);
 
             // Get extraction provider and run extraction
-            $provider = LLMProviderFactory::getExtractionProvider();
+            $provider = $providerFactory->extractionProvider();
             $response = $provider->extract($request);
 
             // Check for network errors that should trigger retry

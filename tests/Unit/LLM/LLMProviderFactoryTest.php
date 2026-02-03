@@ -28,14 +28,43 @@ class LLMProviderFactoryTest extends TestCase
 
     public function test_get_classification_providers_returns_array(): void
     {
-        // Note: This will fail until provider classes are implemented in BE-06, BE-07
-        $this->markTestSkipped('Requires provider implementations');
+        $originalProvidersConfig = config('llm.providers');
+        $originalClassificationProviders = config('llm.classification.providers');
+
+        config([
+            'llm.providers' => [
+                'synthetic-kimi' => [
+                    'class' => \App\Services\LLM\SyntheticKimiProvider::class,
+                    'api_key' => 'test-synthetic-key',
+                    'model' => 'hf:moonshotai/Kimi-K2.5',
+                    'max_tokens' => 1024,
+                    'temperature' => 0.3,
+                ],
+                'openai-gpt4-mini' => [
+                    'class' => \App\Services\LLM\OpenAIGPT4MiniProvider::class,
+                    'api_key' => 'test-openai-key',
+                    'model' => 'gpt-4o-mini',
+                    'max_tokens' => 1024,
+                    'temperature' => 0.3,
+                ],
+            ],
+            'llm.classification.providers' => ['synthetic-kimi', 'openai-gpt4-mini'],
+        ]);
 
         $providers = LLMProviderFactory::getClassificationProviders();
 
         $this->assertCount(2, $providers);
+        $this->assertInstanceOf(\App\Services\LLM\SyntheticKimiProvider::class, $providers[0]);
+        $this->assertInstanceOf(\App\Services\LLM\OpenAIGPT4MiniProvider::class, $providers[1]);
+
         foreach ($providers as $provider) {
             $this->assertInstanceOf(LLMProviderInterface::class, $provider);
+            $this->assertTrue($provider->supportsClassification());
         }
+
+        config([
+            'llm.providers' => $originalProvidersConfig,
+            'llm.classification.providers' => $originalClassificationProviders,
+        ]);
     }
 }

@@ -7,6 +7,26 @@ use InvalidArgumentException;
 class LLMProviderFactory
 {
     /**
+     * Instance wrapper around {@see self::getClassificationProviders()}.
+     *
+     * This allows jobs/services to depend on the container for testability.
+     *
+     * @return array<LLMProviderInterface>
+     */
+    public function classificationProviders(): array
+    {
+        return self::getClassificationProviders();
+    }
+
+    /**
+     * Instance wrapper around {@see self::getExtractionProvider()}.
+     */
+    public function extractionProvider(): LLMProviderInterface
+    {
+        return self::getExtractionProvider();
+    }
+
+    /**
      * Create an LLM provider instance by name.
      *
      * @param string $providerName Provider key from config (e.g., 'claude-haiku')

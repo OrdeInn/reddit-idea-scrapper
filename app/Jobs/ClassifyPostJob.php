@@ -46,7 +46,7 @@ class ClassifyPostJob implements ShouldQueue
     /**
      * Execute the job.
      */
-    public function handle(): void
+    public function handle(LLMProviderFactory $providerFactory): void
     {
         $scan = $this->scan->fresh();
         $post = $this->post->fresh();
@@ -111,7 +111,7 @@ class ClassifyPostJob implements ShouldQueue
         ]);
 
         // Get classification providers from factory
-        $providers = LLMProviderFactory::getClassificationProviders();
+        $providers = $providerFactory->classificationProviders();
 
         // Create classification request from post
         $request = ClassificationRequest::fromPost($post);

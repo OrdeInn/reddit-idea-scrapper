@@ -12,6 +12,7 @@ use App\Models\Subreddit;
 use App\Services\LLM\ClaudeSonnetProvider;
 use App\Services\LLM\DTOs\ExtractionResponse;
 use App\Services\LLM\DTOs\IdeaDTO;
+use App\Services\LLM\LLMProviderFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Mockery;
@@ -77,7 +78,7 @@ class ExtractPostIdeasJobTest extends TestCase
         $this->mockProvider($mockIdea);
 
         $job = new ExtractPostIdeasJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         $this->assertDatabaseHas('ideas', [
             'post_id' => $this->post->id,
@@ -115,7 +116,7 @@ class ExtractPostIdeasJobTest extends TestCase
         $this->mockFactory($mockProvider);
 
         $job = new ExtractPostIdeasJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         $this->assertEquals(0, Idea::where('post_id', $this->post->id)->count());
 
@@ -154,7 +155,7 @@ class ExtractPostIdeasJobTest extends TestCase
         $this->mockFactory($mockProvider);
 
         $job = new ExtractPostIdeasJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         // Should only store 2 ideas due to limit
         $this->assertEquals(2, Idea::where('post_id', $this->post->id)->count());
@@ -180,7 +181,7 @@ class ExtractPostIdeasJobTest extends TestCase
         $this->mockFactory($mockProvider);
 
         $job = new ExtractPostIdeasJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         // No new ideas should be created
         $this->assertEquals(0, Idea::where('post_id', $this->post->id)->count());
@@ -206,7 +207,7 @@ class ExtractPostIdeasJobTest extends TestCase
         $this->mockFactory($mockProvider);
 
         $job = new ExtractPostIdeasJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         // No ideas should be created
         $this->assertEquals(0, Idea::where('post_id', $this->post->id)->count());
@@ -228,7 +229,7 @@ class ExtractPostIdeasJobTest extends TestCase
         $this->mockFactory($mockProvider);
 
         $job = new ExtractPostIdeasJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         // No ideas should be created
         $this->assertEquals(0, Idea::where('post_id', $this->post->id)->count());
@@ -250,7 +251,7 @@ class ExtractPostIdeasJobTest extends TestCase
         $this->mockFactory($mockProvider);
 
         $job = new ExtractPostIdeasJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         // No ideas should be created
         $this->assertEquals(0, Idea::where('post_id', $this->post->id)->count());
@@ -280,7 +281,7 @@ class ExtractPostIdeasJobTest extends TestCase
         $this->mockFactory($mockProvider);
 
         $job = new ExtractPostIdeasJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         // Should store all 3 ideas
         $this->assertEquals(3, Idea::where('post_id', $this->post->id)->count());
@@ -301,7 +302,7 @@ class ExtractPostIdeasJobTest extends TestCase
         $this->mockProvider($mockIdea);
 
         $job = new ExtractPostIdeasJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         $this->assertDatabaseHas('ideas', [
             'post_id' => $this->post->id,
@@ -331,7 +332,7 @@ class ExtractPostIdeasJobTest extends TestCase
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Transient extraction failure (network), retrying');
 
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
     }
 
     public function test_failed_method_marks_post_extracted(): void
@@ -403,7 +404,8 @@ class ExtractPostIdeasJobTest extends TestCase
      */
     private function mockFactory($mockProvider): void
     {
-        $mockFactory = Mockery::mock('alias:\App\Services\LLM\LLMProviderFactory');
-        $mockFactory->shouldReceive('getExtractionProvider')->andReturn($mockProvider);
+        $this->mock(LLMProviderFactory::class, function ($mock) use ($mockProvider) {
+            $mock->shouldReceive('extractionProvider')->andReturn($mockProvider);
+        });
     }
 }

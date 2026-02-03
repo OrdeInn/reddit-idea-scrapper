@@ -45,7 +45,7 @@ return [
 
     'fetch' => [
         // First scan looks back this many months
-        'default_timeframe_months' => 3,
+        'default_timeframe_months' => 1,
 
         // Rescan looks back this many weeks for new content
         'rescan_timeframe_weeks' => 2,

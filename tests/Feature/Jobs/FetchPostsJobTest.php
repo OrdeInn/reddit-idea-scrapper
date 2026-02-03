@@ -206,11 +206,21 @@ class FetchPostsJobTest extends TestCase
         $this->assertNotNull($scan->date_from);
         $this->assertNotNull($scan->date_to);
 
-        // Initial scan should be approximately 3 months back
+        // Initial scan should use configured timeframe
         $this->assertNotNull($capturedAfter);
-        $daysDiff = abs(now()->diffInDays($capturedAfter));
-        $this->assertGreaterThanOrEqual(85, $daysDiff); // ~3 months
-        $this->assertLessThanOrEqual(95, $daysDiff);
+
+        $now = now();
+        // Verify date is in the past (not future)
+        $this->assertTrue($capturedAfter->lessThanOrEqualTo($now), 'Expected captured date to be in the past');
+
+        $daysDiff = $capturedAfter->diffInDays($now);
+        $expectedMonths = (int) config('reddit.fetch.default_timeframe_months', 3);
+        $this->assertGreaterThan(0, $expectedMonths, 'Timeframe months should be positive');
+
+        $expectedDaysMin = ($expectedMonths * 30) - 5; // Buffer for month variation
+        $expectedDaysMax = ($expectedMonths * 31) + 5;
+        $this->assertGreaterThanOrEqual($expectedDaysMin, $daysDiff);
+        $this->assertLessThanOrEqual($expectedDaysMax, $daysDiff);
     }
 
     public function test_calculates_date_range_for_rescan(): void
@@ -246,11 +256,21 @@ class FetchPostsJobTest extends TestCase
         $job = new FetchPostsJob($scan);
         $job->handle($mockReddit);
 
-        // Rescan should be approximately 2 weeks back
+        // Rescan should use configured timeframe
         $this->assertNotNull($capturedAfter);
-        $daysDiff = abs(now()->diffInDays($capturedAfter));
-        $this->assertGreaterThanOrEqual(13, $daysDiff);
-        $this->assertLessThanOrEqual(15, $daysDiff);
+
+        $now = now();
+        // Verify date is in the past (not future)
+        $this->assertTrue($capturedAfter->lessThanOrEqualTo($now), 'Expected captured date to be in the past');
+
+        $daysDiff = $capturedAfter->diffInDays($now);
+        $expectedWeeks = (int) config('reddit.fetch.rescan_timeframe_weeks', 2);
+        $this->assertGreaterThan(0, $expectedWeeks, 'Timeframe weeks should be positive');
+
+        $expectedDaysMin = ($expectedWeeks * 7) - 1; // Small buffer for timing
+        $expectedDaysMax = ($expectedWeeks * 7) + 1;
+        $this->assertGreaterThanOrEqual($expectedDaysMin, $daysDiff);
+        $this->assertLessThanOrEqual($expectedDaysMax, $daysDiff);
     }
 
     public function test_uses_checkpoint_for_resumable_scan(): void

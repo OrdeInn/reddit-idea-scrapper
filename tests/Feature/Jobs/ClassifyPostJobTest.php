@@ -104,7 +104,7 @@ class ClassifyPostJobTest extends TestCase
         $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         // Assert classification was created
         $this->assertDatabaseHas('classifications', [
@@ -156,7 +156,7 @@ class ClassifyPostJobTest extends TestCase
         $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         $classification = Classification::where('post_id', $this->post->id)->first();
         $this->assertNotNull($classification);
@@ -192,7 +192,7 @@ class ClassifyPostJobTest extends TestCase
         $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         $classification = Classification::where('post_id', $this->post->id)->first();
         $this->assertNotNull($classification);
@@ -237,7 +237,7 @@ class ClassifyPostJobTest extends TestCase
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Classification partially failed with transient error');
 
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         // Verify partial classification was deleted (for retry)
         $this->assertDatabaseMissing('classifications', [
@@ -277,7 +277,7 @@ class ClassifyPostJobTest extends TestCase
         $job->tries = 3;
 
         // Should NOT throw - should use fallback
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         // Verify classification was created with fallback logic
         $classification = Classification::where('post_id', $this->post->id)->first();
@@ -315,7 +315,7 @@ class ClassifyPostJobTest extends TestCase
         $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         $classification = Classification::where('post_id', $this->post->id)->first();
         $this->assertNotNull($classification);
@@ -359,7 +359,7 @@ class ClassifyPostJobTest extends TestCase
         $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         $classification = Classification::where('post_id', $this->post->id)->first();
         $this->assertNotNull($classification);
@@ -400,7 +400,7 @@ class ClassifyPostJobTest extends TestCase
         $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         $classification = Classification::where('post_id', $this->post->id)->first();
         $this->assertNotNull($classification);
@@ -438,7 +438,7 @@ class ClassifyPostJobTest extends TestCase
         $this->assertEquals(0, $this->scan->posts_classified);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         // Progress should be updated
         $this->scan->refresh();
@@ -461,7 +461,7 @@ class ClassifyPostJobTest extends TestCase
         $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         // Should only have one classification record
         $this->assertEquals(1, Classification::where('post_id', $this->post->id)->count());
@@ -482,7 +482,7 @@ class ClassifyPostJobTest extends TestCase
         $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         // No classification should be created
         $this->assertDatabaseMissing('classifications', [
@@ -501,7 +501,7 @@ class ClassifyPostJobTest extends TestCase
         $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         // No classification should be created
         $this->assertDatabaseMissing('classifications', [
@@ -560,7 +560,7 @@ class ClassifyPostJobTest extends TestCase
         $job->tries = 3;
 
         // Should NOT throw - should use fallback despite being first attempt
-        $job->handle();
+        $job->handle(app(LLMProviderFactory::class));
 
         $classification = Classification::where('post_id', $this->post->id)->first();
         $this->assertNotNull($classification);
@@ -580,12 +580,8 @@ class ClassifyPostJobTest extends TestCase
      */
     private function mockFactory(array $providers): void
     {
-        // We need to mock the factory method
-        // Since LLMProviderFactory uses static methods, we'll use a partial mock
-        // or we can override the config to use test providers
-
-        // For this test, we'll use a workaround by binding the factory to a mock
-        $mockFactory = Mockery::mock('alias:' . LLMProviderFactory::class);
-        $mockFactory->shouldReceive('getClassificationProviders')->andReturn($providers);
+        $this->mock(LLMProviderFactory::class, function ($mock) use ($providers) {
+            $mock->shouldReceive('classificationProviders')->andReturn($providers);
+        });
     }
 }
