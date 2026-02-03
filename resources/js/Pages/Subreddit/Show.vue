@@ -33,7 +33,7 @@ const isPollRequestInFlight = ref(false)
 let pollInterval = null
 let pollAbortController = null
 
-const isScanning = computed(() => scanStatus.value?.has_active_scan)
+const isScanning = computed(() => !!scanStatus.value?.has_active_scan)
 const activeScan = computed(() => scanStatus.value?.active_scan)
 const lastScan = computed(() => scanStatus.value?.last_scan)
 
@@ -165,7 +165,8 @@ const pollStatus = async () => {
             scanStatus.value = {
                 ...scanStatus.value,
                 has_active_scan: false,
-                active_scan: null,
+                // Keep failed scan for display/retry, only clear if completed
+                active_scan: data.scan?.is_failed ? data.scan : null,
                 last_scan: data.scan?.is_completed ? data.scan : scanStatus.value.last_scan,
             }
             router.reload({ only: ['status', 'subreddit'] })
@@ -285,10 +286,11 @@ const deleteSubreddit = () => {
             {{ errorMessage }}
         </div>
 
-        <!-- Scan Progress (when scanning) -->
+        <!-- Scan Progress (when scanning or failed) -->
         <ScanProgress
-            v-if="isScanning && activeScan"
+            v-if="(isScanning || activeScan?.is_failed) && activeScan"
             :scan="activeScan"
+            @retry="startScan"
             class="mb-6"
         />
 
