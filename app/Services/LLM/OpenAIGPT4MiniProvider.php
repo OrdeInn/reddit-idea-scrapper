@@ -12,6 +12,12 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
+/**
+ * OpenAI GPT classifier provider for classification tasks.
+ *
+ * Note: The class name is legacy from when it used GPT-4o-mini. The configured model (see config/llm.php)
+ * is now GPT-5-mini (gpt-5-mini-2025-08-07) for improved instruction-following and classification accuracy.
+ */
 class OpenAIGPT4MiniProvider extends BaseLLMProvider
 {
     private const API_URL = 'https://api.openai.com/v1/chat/completions';
@@ -53,7 +59,7 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
     }
 
     /**
-     * Classify a Reddit post using GPT-4o-mini.
+     * Classify a Reddit post using GPT-5-mini.
      */
     public function classify(ClassificationRequest $request): ClassificationResponse
     {
@@ -202,7 +208,7 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
     public function extract(ExtractionRequest $request): ExtractionResponse
     {
         throw new RuntimeException(
-            'OpenAI GPT-4o-mini provider does not support extraction. ' .
+            'OpenAI classification provider does not support extraction. ' .
             'Use supportsExtraction() to check capability before calling extract().'
         );
     }

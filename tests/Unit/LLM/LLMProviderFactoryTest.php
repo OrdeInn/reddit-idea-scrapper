@@ -67,4 +67,12 @@ class LLMProviderFactoryTest extends TestCase
             'llm.classification.providers' => $originalClassificationProviders,
         ]);
     }
+
+    public function test_openai_classifier_uses_gpt_5_mini_model(): void
+    {
+        $provider = LLMProviderFactory::make('openai-gpt4-mini');
+
+        // Verify the model is correctly configured to GPT-5-mini
+        $this->assertEquals('gpt-5-mini-2025-08-07', $provider->getModelName());
+    }
 }

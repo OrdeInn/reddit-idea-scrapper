@@ -21,7 +21,7 @@ return new class extends Migration
             $table->string('haiku_category', 50)->nullable();
             $table->text('haiku_reasoning')->nullable();
 
-            // GPT-4o-mini results
+            // OpenAI classifier results
             $table->string('gpt_verdict', 10)->nullable(); // 'keep' or 'skip'
             $table->decimal('gpt_confidence', 4, 3)->nullable(); // 0.000 to 1.000
             $table->string('gpt_category', 50)->nullable();

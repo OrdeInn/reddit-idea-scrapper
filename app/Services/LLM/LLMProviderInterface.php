@@ -33,7 +33,7 @@ interface LLMProviderInterface
     public function getProviderName(): string;
 
     /**
-     * Get the model name being used (e.g., "claude-3-5-haiku", "gpt-4o-mini").
+     * Get the model name being used (e.g., "claude-sonnet-4-5-20250929", "gpt-5-mini-2025-08-07").
      */
     public function getModelName(): string;
 

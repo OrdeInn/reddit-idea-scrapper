@@ -68,7 +68,7 @@ class ClassifyPostJobTest extends TestCase
 
         $this->mockGptProvider = Mockery::mock(OpenAIGPT4MiniProvider::class);
         $this->mockGptProvider->shouldReceive('getProviderName')->andReturn('openai');
-        $this->mockGptProvider->shouldReceive('getModelName')->andReturn('gpt-4o-mini');
+        $this->mockGptProvider->shouldReceive('getModelName')->andReturn('gpt-5-mini-2025-08-07');
     }
 
     protected function tearDown(): void

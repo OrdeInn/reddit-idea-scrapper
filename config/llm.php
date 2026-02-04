@@ -71,7 +71,7 @@ return [
         'openai-gpt4-mini' => [
             'class' => App\Services\LLM\OpenAIGPT4MiniProvider::class,
             'api_key' => env('OPENAI_API_KEY', ''),
-            'model' => 'gpt-4o-mini',
+            'model' => 'gpt-5-mini-2025-08-07',
             'max_tokens' => 1024,
             'temperature' => 0.3,
         ],

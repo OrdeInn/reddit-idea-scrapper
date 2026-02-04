@@ -229,7 +229,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
         );
 
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('OpenAI GPT-4o-mini provider does not support extraction');
+        $this->expectExceptionMessage('OpenAI classification provider does not support extraction');
 
         $provider->extract($request);
     }
