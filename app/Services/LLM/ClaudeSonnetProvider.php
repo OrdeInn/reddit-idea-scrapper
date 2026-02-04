@@ -61,21 +61,44 @@ class ClaudeSonnetProvider extends BaseLLMProvider
             'model' => $this->model,
         ]);
 
+        $requestPayload = [
+            'model' => $this->model,
+            'max_tokens' => $this->maxTokens,
+            'temperature' => $this->temperature,
+            'messages' => [
+                [
+                    'role' => 'user',
+                    'content' => $this->toAnthropicContent($request->getPromptContent()),
+                ],
+            ],
+            'system' => 'You are a classification assistant. Analyze Reddit posts and classify them as potential SaaS idea sources. Respond only in valid JSON format.',
+        ];
+
+        $requestId = $this->getLogger()->logRequest(
+            provider: $this->getProviderName(),
+            model: $this->model,
+            operation: 'classification',
+            requestPayload: $requestPayload,
+            postId: $request->postId
+        );
+        $startTime = microtime(true);
+
         try {
-            $response = $this->client()
-                ->post($this->getApiUrl(), [
-                    'model' => $this->model,
-                    'max_tokens' => $this->maxTokens,
-                    'temperature' => $this->temperature,
-                    'messages' => [
-                        [
-                            'role' => 'user',
-                            'content' => $this->toAnthropicContent($request->getPromptContent()),
-                        ],
-                    ],
-                    'system' => 'You are a classification assistant. Analyze Reddit posts and classify them as potential SaaS idea sources. Respond only in valid JSON format.',
-                ]);
+            $response = $this->client()->post($this->getApiUrl(), $requestPayload);
         } catch (ConnectionException $e) {
+            $durationMs = (microtime(true) - $startTime) * 1000;
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: $e->getMessage(),
+                postId: $request->postId
+            );
+
             Log::error('Claude Sonnet API connection error', [
                 'error' => $e->getMessage(),
                 'provider' => $this->getProviderName(),
@@ -91,9 +114,23 @@ class ClaudeSonnetProvider extends BaseLLMProvider
             );
         }
 
+        $durationMs = (microtime(true) - $startTime) * 1000;
+
         if ($response->failed()) {
             $status = $response->status();
             $error = $response->json('error.message') ?? $response->body();
+
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: "HTTP {$status}: {$error}",
+                postId: $request->postId
+            );
 
             Log::error('Claude Sonnet API error', [
                 'status' => $status,
@@ -109,6 +146,18 @@ class ClaudeSonnetProvider extends BaseLLMProvider
 
         // Guard against non-JSON or invalid responses
         if (! is_array($data)) {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Response is not valid JSON',
+                postId: $request->postId
+            );
+
             Log::warning('Claude Sonnet API returned invalid JSON response', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
@@ -129,6 +178,18 @@ class ClaudeSonnetProvider extends BaseLLMProvider
         $content = $this->extractTextFromAnthropicContent($data['content'] ?? null);
 
         if (empty($content)) {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Response content is empty',
+                postId: $request->postId
+            );
+
             Log::warning('Claude Sonnet API returned empty content', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
@@ -147,6 +208,18 @@ class ClaudeSonnetProvider extends BaseLLMProvider
         $parsed = $this->parseJsonResponse($content);
 
         if (empty($parsed)) {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Failed to parse JSON response',
+                postId: $request->postId
+            );
+
             Log::warning('Failed to parse Claude Sonnet JSON response', [
                 'content_length' => strlen($content),
                 'provider' => $this->getProviderName(),
@@ -162,6 +235,17 @@ class ClaudeSonnetProvider extends BaseLLMProvider
             );
         }
 
+        $this->getLogger()->logResponse(
+            requestId: $requestId,
+            provider: $this->getProviderName(),
+            model: $this->model,
+            operation: 'classification',
+            parsedResult: $parsed,
+            durationMs: $durationMs,
+            success: true,
+            postId: $request->postId
+        );
+
         return ClassificationResponse::fromJson($parsed, $rawResponse);
     }
 
@@ -170,21 +254,44 @@ class ClaudeSonnetProvider extends BaseLLMProvider
      */
     public function extract(ExtractionRequest $request): ExtractionResponse
     {
+        $requestPayload = [
+            'model' => $this->model,
+            'max_tokens' => $this->maxTokens,
+            'temperature' => $this->temperature,
+            'messages' => [
+                [
+                    'role' => 'user',
+                    'content' => $this->toAnthropicContent($request->getPromptContent()),
+                ],
+            ],
+            'system' => $this->getExtractionSystemPrompt(),
+        ];
+
+        $requestId = $this->getLogger()->logRequest(
+            provider: $this->getProviderName(),
+            model: $this->model,
+            operation: 'extraction',
+            requestPayload: $requestPayload,
+            postId: $request->postId
+        );
+        $startTime = microtime(true);
+
         try {
-            $response = $this->client()
-                ->post($this->getApiUrl(), [
-                    'model' => $this->model,
-                    'max_tokens' => $this->maxTokens,
-                    'temperature' => $this->temperature,
-                    'messages' => [
-                        [
-                            'role' => 'user',
-                            'content' => $this->toAnthropicContent($request->getPromptContent()),
-                        ],
-                    ],
-                    'system' => $this->getExtractionSystemPrompt(),
-                ]);
+            $response = $this->client()->post($this->getApiUrl(), $requestPayload);
         } catch (ConnectionException $e) {
+            $durationMs = (microtime(true) - $startTime) * 1000;
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'extraction',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: $e->getMessage(),
+                postId: $request->postId
+            );
+
             Log::error('Claude Sonnet API connection error during extraction', [
                 'error' => $e->getMessage(),
                 'provider' => $this->getProviderName(),
@@ -197,9 +304,23 @@ class ClaudeSonnetProvider extends BaseLLMProvider
             );
         }
 
+        $durationMs = (microtime(true) - $startTime) * 1000;
+
         if ($response->failed()) {
             $status = $response->status();
             $error = $response->json('error.message') ?? $response->body();
+
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'extraction',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: "HTTP {$status}: {$error}",
+                postId: $request->postId
+            );
 
             Log::error('Claude Sonnet API error during extraction', [
                 'status' => $status,
@@ -215,6 +336,18 @@ class ClaudeSonnetProvider extends BaseLLMProvider
 
         // Guard against non-JSON or invalid responses
         if (! is_array($data)) {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'extraction',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Response is not valid JSON',
+                postId: $request->postId
+            );
+
             Log::warning('Claude Sonnet API returned invalid JSON response during extraction', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
@@ -232,6 +365,18 @@ class ClaudeSonnetProvider extends BaseLLMProvider
         $content = $this->extractTextFromAnthropicContent($data['content'] ?? null);
 
         if (empty($content)) {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'extraction',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Response content is empty',
+                postId: $request->postId
+            );
+
             Log::warning('Claude Sonnet API returned empty content during extraction', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
@@ -263,6 +408,17 @@ class ClaudeSonnetProvider extends BaseLLMProvider
         if (! empty($parsed) && ! isset($parsed[0])) {
             $parsed = [$parsed];
         }
+
+        $this->getLogger()->logResponse(
+            requestId: $requestId,
+            provider: $this->getProviderName(),
+            model: $this->model,
+            operation: 'extraction',
+            parsedResult: $parsed,
+            durationMs: $durationMs,
+            success: true,
+            postId: $request->postId
+        );
 
         return ExtractionResponse::fromJson($parsed, $rawResponse);
     }

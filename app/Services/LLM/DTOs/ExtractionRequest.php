@@ -12,6 +12,7 @@ class ExtractionRequest
         public readonly int $upvotes,
         public readonly int $numComments,
         public readonly string $classificationStatus,
+        public readonly ?int $postId = null,
     ) {}
 
     /**
@@ -38,6 +39,7 @@ class ExtractionRequest
             upvotes: $post->upvotes,
             numComments: $post->num_comments,
             classificationStatus: $post->classification?->final_decision ?? 'keep',
+            postId: $post->id,
         );
     }
 

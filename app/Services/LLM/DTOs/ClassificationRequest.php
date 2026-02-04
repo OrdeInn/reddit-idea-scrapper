@@ -11,6 +11,7 @@ class ClassificationRequest
         public readonly int $upvotes,
         public readonly int $numComments,
         public readonly string $subreddit,
+        public readonly ?int $postId = null,
     ) {}
 
     /**
@@ -36,6 +37,7 @@ class ClassificationRequest
             upvotes: $post->upvotes,
             numComments: $post->num_comments,
             subreddit: $post->subreddit->name,
+            postId: $post->id,
         );
     }
 

@@ -74,9 +74,31 @@ class SyntheticKimiProvider extends BaseLLMProvider
             ],
         ];
 
+        $requestId = $this->getLogger()->logRequest(
+            provider: $this->getProviderName(),
+            model: $this->model,
+            operation: 'classification',
+            requestPayload: $payload,
+            postId: $request->postId
+        );
+        $startTime = microtime(true);
+
         try {
             $response = $this->client()->post($this->getApiUrl(), $payload);
         } catch (ConnectionException $e) {
+            $durationMs = (microtime(true) - $startTime) * 1000;
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: $e->getMessage(),
+                postId: $request->postId
+            );
+
             Log::error('Synthetic API connection error', [
                 'error' => $e->getMessage(),
                 'provider' => $this->getProviderName(),
@@ -91,9 +113,22 @@ class SyntheticKimiProvider extends BaseLLMProvider
         }
 
         if ($response->failed()) {
+            $durationMs = (microtime(true) - $startTime) * 1000;
             $status = $response->status();
             $body = $response->body();
             $error = $response->json('error.message') ?? $body;
+
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: "HTTP {$status}: {$error}",
+                postId: $request->postId
+            );
 
             Log::error('Synthetic API error', [
                 'status' => $status,
@@ -121,10 +156,23 @@ class SyntheticKimiProvider extends BaseLLMProvider
             );
         }
 
+        $durationMs = (microtime(true) - $startTime) * 1000;
         $data = $response->json();
 
         // Guard against non-JSON or invalid responses
         if (! is_array($data)) {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Response is not valid JSON',
+                postId: $request->postId
+            );
+
             Log::warning('Synthetic API returned invalid JSON response', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
@@ -145,6 +193,24 @@ class SyntheticKimiProvider extends BaseLLMProvider
         // Check for content filter
         $finishReason = $data['choices'][0]['finish_reason'] ?? null;
         if ($finishReason === 'content_filter') {
+            $parsedResult = [
+                'verdict' => 'skip',
+                'confidence' => 0.0,
+                'category' => 'content-filtered',
+                'reasoning' => 'Content was filtered by the API',
+            ];
+
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: $parsedResult,
+                durationMs: $durationMs,
+                success: true,
+                postId: $request->postId
+            );
+
             Log::warning('Synthetic API content filter triggered', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
@@ -164,6 +230,18 @@ class SyntheticKimiProvider extends BaseLLMProvider
         $content = $this->normalizeMessageContent($contentRaw);
 
         if ($content === '') {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Response content is empty',
+                postId: $request->postId
+            );
+
             Log::warning('Synthetic API returned empty content', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
@@ -179,6 +257,18 @@ class SyntheticKimiProvider extends BaseLLMProvider
         $parsed = $this->parseJsonResponse($content);
 
         if (empty($parsed)) {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Failed to parse JSON response',
+                postId: $request->postId
+            );
+
             Log::warning('Failed to parse Synthetic API JSON response', [
                 'content_length' => strlen($content),
                 'provider' => $this->getProviderName(),
@@ -191,6 +281,17 @@ class SyntheticKimiProvider extends BaseLLMProvider
                 provider: $this->getProviderName()
             );
         }
+
+        $this->getLogger()->logResponse(
+            requestId: $requestId,
+            provider: $this->getProviderName(),
+            model: $this->model,
+            operation: 'classification',
+            parsedResult: $parsed,
+            durationMs: $durationMs,
+            success: true,
+            postId: $request->postId
+        );
 
         return ClassificationResponse::fromJson($parsed, $rawResponse);
     }

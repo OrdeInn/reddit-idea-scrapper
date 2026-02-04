@@ -29,15 +29,22 @@ class LLMLogger
         $requestId = (string) Str::uuid();
         $timestamp = now()->toIso8601String();
 
-        Log::channel($this->channel)->info('LLM Request', [
-            'request_id' => $requestId,
-            'provider' => $provider,
-            'model' => $model,
-            'operation' => $operation,
-            'post_id' => $postId,
-            'timestamp' => $timestamp,
-            'request_payload' => $this->sanitizePayload($requestPayload),
-        ]);
+        try {
+            Log::channel($this->channel)->info('LLM Request', [
+                'request_id' => $requestId,
+                'provider' => $provider,
+                'model' => $model,
+                'operation' => $operation,
+                'post_id' => $postId,
+                'timestamp' => $timestamp,
+                'request_payload' => $this->sanitizePayload($requestPayload),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to log LLM request', [
+                'error' => $e->getMessage(),
+                'request_id' => $requestId,
+            ]);
+        }
 
         return $requestId;
     }
@@ -62,7 +69,8 @@ class LLMLogger
         array $parsedResult,
         float $durationMs,
         bool $success,
-        ?string $error = null
+        ?string $error = null,
+        ?int $postId = null
     ): void {
         $timestamp = now()->toIso8601String();
 
@@ -71,6 +79,7 @@ class LLMLogger
             'provider' => $provider,
             'model' => $model,
             'operation' => $operation,
+            'post_id' => $postId,
             'timestamp' => $timestamp,
             'duration_ms' => $durationMs,
             'success' => $success,
@@ -81,8 +90,15 @@ class LLMLogger
             $logData['error'] = $error;
         }
 
-        $level = $success ? 'info' : 'error';
-        Log::channel($this->channel)->{$level}('LLM Response', $logData);
+        try {
+            $level = $success ? 'info' : 'error';
+            Log::channel($this->channel)->{$level}('LLM Response', $logData);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to log LLM response', [
+                'error' => $e->getMessage(),
+                'request_id' => $requestId,
+            ]);
+        }
     }
 
     /**

@@ -14,6 +14,7 @@ abstract class BaseLLMProvider implements LLMProviderInterface
     protected float $temperature;
     protected int $connectTimeout;
     protected int $requestTimeout;
+    protected ?LLMLogger $logger = null;
 
     public function __construct(array $config)
     {
@@ -268,5 +269,17 @@ abstract class BaseLLMProvider implements LLMProviderInterface
     public function supportsExtraction(): bool
     {
         return true;
+    }
+
+    /**
+     * Get or create the LLMLogger instance.
+     */
+    protected function getLogger(): LLMLogger
+    {
+        if ($this->logger === null) {
+            $this->logger = app(LLMLogger::class);
+        }
+
+        return $this->logger;
     }
 }

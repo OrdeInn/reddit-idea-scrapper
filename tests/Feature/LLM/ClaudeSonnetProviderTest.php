@@ -332,9 +332,21 @@ class ClaudeSonnetProviderTest extends TestCase
 
     public function test_classify_logs_warning(): void
     {
+        // Mock Log to accept warning calls and channel() calls
         Log::shouldReceive('warning')
             ->once()
-            ->with('Using Claude Sonnet for classification is not cost-effective', \Mockery::any());
+            ->withArgs(fn ($message) => $message === 'Using Claude Sonnet for classification is not cost-effective')
+            ->andReturn();
+
+        Log::shouldReceive('channel')
+            ->with('llm')
+            ->andReturnSelf()
+            ->shouldReceive('info')
+            ->andReturn()
+            ->shouldReceive('error')
+            ->andReturn()
+            ->shouldReceive('channel')
+            ->andReturnSelf();
 
         Http::fake([
             'https://api.anthropic.com/v1/messages' => Http::response([
@@ -372,6 +384,8 @@ class ClaudeSonnetProviderTest extends TestCase
         );
 
         $provider->classify($request);
+
+        $this->addToAssertionCount(1);
     }
 
     public function test_handles_connection_exception(): void

@@ -63,25 +63,48 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
      */
     public function classify(ClassificationRequest $request): ClassificationResponse
     {
+        $requestPayload = [
+            'model' => $this->model,
+            'max_tokens' => $this->maxTokens,
+            'temperature' => $this->temperature,
+            'response_format' => ['type' => 'json_object'],
+            'messages' => [
+                [
+                    'role' => 'system',
+                    'content' => 'You are a classification assistant. Analyze Reddit posts and classify them as potential SaaS idea sources. Respond only in JSON format.',
+                ],
+                [
+                    'role' => 'user',
+                    'content' => $request->getPromptContent(),
+                ],
+            ],
+        ];
+
+        $requestId = $this->getLogger()->logRequest(
+            provider: $this->getProviderName(),
+            model: $this->model,
+            operation: 'classification',
+            requestPayload: $requestPayload,
+            postId: $request->postId
+        );
+        $startTime = microtime(true);
+
         try {
-            $response = $this->client()
-                ->post($this->getApiUrl(), [
-                    'model' => $this->model,
-                    'max_tokens' => $this->maxTokens,
-                    'temperature' => $this->temperature,
-                    'response_format' => ['type' => 'json_object'],
-                    'messages' => [
-                        [
-                            'role' => 'system',
-                            'content' => 'You are a classification assistant. Analyze Reddit posts and classify them as potential SaaS idea sources. Respond only in JSON format.',
-                        ],
-                        [
-                            'role' => 'user',
-                            'content' => $request->getPromptContent(),
-                        ],
-                    ],
-                ]);
+            $response = $this->client()->post($this->getApiUrl(), $requestPayload);
         } catch (ConnectionException $e) {
+            $durationMs = (microtime(true) - $startTime) * 1000;
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: $e->getMessage(),
+                postId: $request->postId
+            );
+
             Log::error('OpenAI API connection error', [
                 'error' => $e->getMessage(),
                 'provider' => $this->getProviderName(),
@@ -96,9 +119,22 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
         }
 
         if ($response->failed()) {
+            $durationMs = (microtime(true) - $startTime) * 1000;
             $status = $response->status();
             $body = $response->body();
             $error = $response->json('error.message') ?? $body;
+
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: "HTTP {$status}: {$error}",
+                postId: $request->postId
+            );
 
             Log::error('OpenAI API error', [
                 'status' => $status,
@@ -126,10 +162,23 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
             );
         }
 
+        $durationMs = (microtime(true) - $startTime) * 1000;
         $data = $response->json();
 
         // Guard against non-JSON or invalid responses
         if (! is_array($data)) {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Response is not valid JSON',
+                postId: $request->postId
+            );
+
             Log::warning('OpenAI API returned invalid JSON response', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
@@ -150,6 +199,24 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
         // Check for content filter
         $finishReason = $data['choices'][0]['finish_reason'] ?? null;
         if ($finishReason === 'content_filter') {
+            $parsedResult = [
+                'verdict' => 'skip',
+                'confidence' => 0.0,
+                'category' => 'content-filtered',
+                'reasoning' => 'Content was filtered by the API',
+            ];
+
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: $parsedResult,
+                durationMs: $durationMs,
+                success: true,
+                postId: $request->postId
+            );
+
             Log::warning('OpenAI content filter triggered', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
@@ -169,6 +236,18 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
         $content = $this->normalizeMessageContent($contentRaw);
 
         if ($content === '') {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Response content is empty',
+                postId: $request->postId
+            );
+
             Log::warning('OpenAI API returned empty content', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
@@ -184,6 +263,18 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
         $parsed = $this->parseJsonResponse($content);
 
         if (empty($parsed)) {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Failed to parse JSON response',
+                postId: $request->postId
+            );
+
             Log::warning('Failed to parse OpenAI JSON response', [
                 'content_length' => strlen($content),
                 'provider' => $this->getProviderName(),
@@ -195,6 +286,17 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
                 provider: $this->getProviderName()
             );
         }
+
+        $this->getLogger()->logResponse(
+            requestId: $requestId,
+            provider: $this->getProviderName(),
+            model: $this->model,
+            operation: 'classification',
+            parsedResult: $parsed,
+            durationMs: $durationMs,
+            success: true,
+            postId: $request->postId
+        );
 
         return ClassificationResponse::fromJson($parsed, $rawResponse);
     }
