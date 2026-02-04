@@ -80,13 +80,8 @@ const scoreLabels = {
             </div>
 
             <!-- Audience -->
-            <div class="md:col-span-2">
+            <div class="md:col-span-3">
                 <p class="text-sm text-gray-600 truncate">{{ idea.target_audience }}</p>
-            </div>
-
-            <!-- Complexity -->
-            <div class="md:col-span-1 text-center">
-                <span class="text-sm text-gray-600">{{ idea.score_complexity }}/5</span>
             </div>
 
             <!-- Subreddit (optional) -->

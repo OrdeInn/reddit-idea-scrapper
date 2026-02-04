@@ -168,8 +168,7 @@ watch(() => props.subredditId, () => {
                 <div class="col-span-1">Star</div>
                 <div class="col-span-4">Idea</div>
                 <div class="col-span-1 text-center">Score</div>
-                <div class="col-span-2">Audience</div>
-                <div class="col-span-1 text-center">Complexity</div>
+                <div class="col-span-3">Audience</div>
                 <div v-if="showSubreddit" class="col-span-2">Source</div>
                 <div :class="showSubreddit ? 'col-span-1' : 'col-span-3'" class="text-right">Date</div>
             </div>
