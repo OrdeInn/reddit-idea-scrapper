@@ -76,7 +76,7 @@ class IdeaDTO
     }
 
     /**
-     * Parse scores and extract individual values.
+     * Parse scores and extract individual values, normalizing red_flags as array of strings.
      */
     private static function parseScores(mixed $scores): array
     {
@@ -92,21 +92,42 @@ class IdeaDTO
                 'demand_reasoning' => '',
                 'overall' => 0,
                 'overall_reasoning' => '',
+                'red_flags' => [],
             ];
         }
 
-        return [
+        // Extract known fields with proper type casting, ensuring strings for reasoning fields
+        $parsedScores = [
             'monetization' => (int) ($scores['monetization'] ?? 0),
-            'monetization_reasoning' => $scores['monetization_reasoning'] ?? '',
+            'monetization_reasoning' => (string) ($scores['monetization_reasoning'] ?? ''),
             'market_saturation' => (int) ($scores['market_saturation'] ?? 0),
-            'saturation_reasoning' => $scores['saturation_reasoning'] ?? '',
+            'saturation_reasoning' => (string) ($scores['saturation_reasoning'] ?? ''),
             'complexity' => (int) ($scores['complexity'] ?? 0),
-            'complexity_reasoning' => $scores['complexity_reasoning'] ?? '',
+            'complexity_reasoning' => (string) ($scores['complexity_reasoning'] ?? ''),
             'demand_evidence' => (int) ($scores['demand_evidence'] ?? 0),
-            'demand_reasoning' => $scores['demand_reasoning'] ?? '',
+            'demand_reasoning' => (string) ($scores['demand_reasoning'] ?? ''),
             'overall' => (int) ($scores['overall'] ?? 0),
-            'overall_reasoning' => $scores['overall_reasoning'] ?? '',
+            'overall_reasoning' => (string) ($scores['overall_reasoning'] ?? ''),
+            'red_flags' => self::parseRedFlags($scores['red_flags'] ?? []),
         ];
+
+        return $parsedScores;
+    }
+
+    /**
+     * Parse red_flags to ensure it's an array of strings, filtering out non-scalar values.
+     */
+    private static function parseRedFlags(mixed $redFlags): array
+    {
+        if (! is_array($redFlags)) {
+            return [];
+        }
+
+        $filtered = array_filter($redFlags, fn ($flag) => is_scalar($flag));
+
+        return array_values(
+            array_map(fn ($flag) => (string) $flag, $filtered)
+        );
     }
 
     /**

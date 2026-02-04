@@ -512,6 +512,7 @@ Always respond with a JSON array of ideas. Return an empty array [] if no viable
 Each idea MUST include ALL fields from the schema provided in the user prompt, including:
 - All top-level fields: idea_title, problem_statement, proposed_solution, target_audience, why_small_team_viable, demand_evidence, monetization_model, branding_suggestions, marketing_channels, existing_competitors, source_quote
 - All scores with EXACT key names: monetization, monetization_reasoning, market_saturation, saturation_reasoning, complexity, complexity_reasoning, demand_evidence, demand_reasoning, overall, overall_reasoning
+- red_flags: array of strings describing any concerns or caveats about the idea
 - For existing_competitors: return as an array ([] if unknown from post)
 - For source_quote: include exact quote from post/comments, or empty string if none applies
 
