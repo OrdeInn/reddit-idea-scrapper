@@ -118,6 +118,14 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'llm' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/llm/llm.log'),
+            'level' => env('LLM_LOG_LEVEL', 'debug'),
+            'days' => env('LLM_LOG_DAYS', 30),
+            'replace_placeholders' => true,
+        ],
+
         'null' => [
             'driver' => 'monolog',
             'handler' => NullHandler::class,
