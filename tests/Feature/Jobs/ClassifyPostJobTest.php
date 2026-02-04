@@ -291,8 +291,9 @@ class ClassifyPostJobTest extends TestCase
         $this->assertEquals('keep', $classification->gpt_verdict);
         $this->assertTrue($classification->gpt_completed);
 
-        // Should use fallback (borderline for keep with reduced confidence)
-        $this->assertEquals(Classification::DECISION_BORDERLINE, $classification->final_decision);
+        // Should use fallback (KEEP with 0.8 confidence >= 0.7 threshold)
+        $this->assertEquals(Classification::DECISION_KEEP, $classification->final_decision);
+        $this->assertEquals(0.8, $classification->combined_score);
     }
 
     public function test_handles_both_models_failing(): void
@@ -365,11 +366,6 @@ class ClassifyPostJobTest extends TestCase
         $this->assertNotNull($classification);
 
         // Consensus score: (0.5 * 1 + 0.5 * 0) / 2 = 0.25 -> discard
-        // Wait, that's below 0.4 so it should be discard. Let me adjust.
-        // For borderline, we need: keep_conf * 1 + skip_conf * 0 = something between 0.4-0.6
-        // (0.8 * 1 + 0.3 * 0) / 2 = 0.4 -> borderline (at threshold)
-        // Actually with the current values: (0.5 * 1 + 0.5 * 0) / 2 = 0.25 which is < 0.4 = discard
-        // Let me verify the test matches expected behavior
         $this->assertEquals(0.25, $classification->combined_score);
         $this->assertEquals(Classification::DECISION_DISCARD, $classification->final_decision);
     }
@@ -565,12 +561,115 @@ class ClassifyPostJobTest extends TestCase
         $classification = Classification::where('post_id', $this->post->id)->first();
         $this->assertNotNull($classification);
 
-        // Should use fallback logic
-        $this->assertEquals(Classification::DECISION_BORDERLINE, $classification->final_decision);
+        // Should use fallback logic (KEEP with 0.9 confidence >= 0.7 threshold)
+        $this->assertEquals(Classification::DECISION_KEEP, $classification->final_decision);
+        $this->assertEquals(0.9, $classification->combined_score);
 
         // Scan progress updated
         $this->scan->refresh();
         $this->assertEquals(1, $this->scan->posts_classified);
+    }
+
+    public function test_single_model_keep_below_confidence_threshold(): void
+    {
+        // Kimi throws permanent error (no retry)
+        $this->mockKimiProvider->shouldReceive('classify')
+            ->once()
+            ->andThrow(new \App\Exceptions\PermanentClassificationException(
+                'Invalid API key',
+                'synthetic'
+            ));
+
+        // GPT succeeds with confidence < 0.7
+        $this->mockGptProvider->shouldReceive('classify')
+            ->once()
+            ->andReturn(new ClassificationResponse(
+                verdict: 'keep',
+                confidence: 0.6,
+                category: Classification::CATEGORY_TOOL_REQUEST,
+                reasoning: 'Weak keep from GPT',
+                rawResponse: [],
+            ));
+
+        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+
+        $job = new ClassifyPostJob($this->scan, $this->post);
+        $job->handle(app(LLMProviderFactory::class));
+
+        $classification = Classification::where('post_id', $this->post->id)->first();
+        $this->assertNotNull($classification);
+
+        // Single model with confidence < 0.7 should be BORDERLINE
+        $this->assertEquals(Classification::DECISION_BORDERLINE, $classification->final_decision);
+        $this->assertEquals(0.6, $classification->combined_score);
+    }
+
+    public function test_single_model_keep_at_confidence_threshold(): void
+    {
+        // Kimi throws permanent error
+        $this->mockKimiProvider->shouldReceive('classify')
+            ->once()
+            ->andThrow(new \App\Exceptions\PermanentClassificationException(
+                'Invalid API key',
+                'synthetic'
+            ));
+
+        // GPT succeeds with confidence exactly 0.7
+        $this->mockGptProvider->shouldReceive('classify')
+            ->once()
+            ->andReturn(new ClassificationResponse(
+                verdict: 'keep',
+                confidence: 0.7,
+                category: Classification::CATEGORY_GENUINE_PROBLEM,
+                reasoning: 'Moderate keep from GPT',
+                rawResponse: [],
+            ));
+
+        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+
+        $job = new ClassifyPostJob($this->scan, $this->post);
+        $job->handle(app(LLMProviderFactory::class));
+
+        $classification = Classification::where('post_id', $this->post->id)->first();
+        $this->assertNotNull($classification);
+
+        // Single model with confidence >= 0.7 should be KEEP
+        $this->assertEquals(Classification::DECISION_KEEP, $classification->final_decision);
+        $this->assertEquals(0.7, $classification->combined_score);
+    }
+
+    public function test_single_model_skip_verdict(): void
+    {
+        // Kimi throws permanent error
+        $this->mockKimiProvider->shouldReceive('classify')
+            ->once()
+            ->andThrow(new \App\Exceptions\PermanentClassificationException(
+                'Invalid API key',
+                'synthetic'
+            ));
+
+        // GPT succeeds with skip verdict
+        $this->mockGptProvider->shouldReceive('classify')
+            ->once()
+            ->andReturn(new ClassificationResponse(
+                verdict: 'skip',
+                confidence: 0.9,
+                category: Classification::CATEGORY_SPAM,
+                reasoning: 'Strong skip from GPT',
+                rawResponse: [],
+            ));
+
+        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+
+        $job = new ClassifyPostJob($this->scan, $this->post);
+        $job->handle(app(LLMProviderFactory::class));
+
+        $classification = Classification::where('post_id', $this->post->id)->first();
+        $this->assertNotNull($classification);
+
+        // Single model with skip verdict should be DISCARD regardless of confidence
+        $this->assertEquals(Classification::DECISION_DISCARD, $classification->final_decision);
+        $this->assertEquals(0.0, $classification->combined_score);
     }
 
     /**

@@ -336,7 +336,7 @@ class ClassifyPostJob implements ShouldQueue
 
                 // Throw exception to trigger Laravel queue retry
                 throw new RuntimeException(
-                    'Classification partially failed with transient error, retrying'
+                    'Classification partially failed with transient error'
                 );
             }
 
@@ -374,15 +374,21 @@ class ClassifyPostJob implements ShouldQueue
         }
 
         // Case 3: Only one model succeeded - use that model's result
-        // If the successful model says keep, mark as borderline (reduced confidence)
-        // If the successful model says skip, mark as discard
+        // Apply confidence threshold to determine final decision:
+        // - High confidence (>= 0.7) + keep verdict → DECISION_KEEP
+        // - Lower confidence (< 0.7) + keep verdict → DECISION_BORDERLINE
+        // - Skip verdict → DECISION_DISCARD
+        $confidenceThreshold = 0.7;
+
         if ($kimiCompleted && ! $gptCompleted) {
             $verdict = $results['synthetic']['response']->verdict;
             $confidence = $results['synthetic']['response']->confidence;
 
             if ($verdict === 'keep') {
-                $classification->final_decision = Classification::DECISION_BORDERLINE;
-                $classification->combined_score = $confidence * 0.5; // Reduced confidence
+                $classification->final_decision = $confidence >= $confidenceThreshold
+                    ? Classification::DECISION_KEEP
+                    : Classification::DECISION_BORDERLINE;
+                $classification->combined_score = $confidence; // Use actual confidence, no penalty
             } else {
                 $classification->final_decision = Classification::DECISION_DISCARD;
                 $classification->combined_score = 0.0;
@@ -392,8 +398,10 @@ class ClassifyPostJob implements ShouldQueue
             $confidence = $results['openai']['response']->confidence;
 
             if ($verdict === 'keep') {
-                $classification->final_decision = Classification::DECISION_BORDERLINE;
-                $classification->combined_score = $confidence * 0.5; // Reduced confidence
+                $classification->final_decision = $confidence >= $confidenceThreshold
+                    ? Classification::DECISION_KEEP
+                    : Classification::DECISION_BORDERLINE;
+                $classification->combined_score = $confidence; // Use actual confidence, no penalty
             } else {
                 $classification->final_decision = Classification::DECISION_DISCARD;
                 $classification->combined_score = 0.0;

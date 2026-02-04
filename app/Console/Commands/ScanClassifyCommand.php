@@ -332,6 +332,8 @@ class ScanClassifyCommand extends Command
         }
 
         // Case 3: Single provider succeeded - use direct verdict
+        $confidenceThreshold = 0.7;
+
         if ($kimiCompleted && ! $gptCompleted) {
             $verdict = $results['synthetic']['response']->verdict;
             $confidence = $results['synthetic']['response']->confidence;
@@ -343,11 +345,16 @@ class ScanClassifyCommand extends Command
                 );
                 $classification->combined_score = $verdict === 'keep' ? $confidence : 0.0;
             } else {
-                // Partial failure: reduce confidence
-                $classification->final_decision = $verdict === 'keep'
-                    ? Classification::DECISION_BORDERLINE
-                    : Classification::DECISION_DISCARD;
-                $classification->combined_score = $verdict === 'keep' ? $confidence * 0.5 : 0.0;
+                // Partial failure: use confidence threshold for decision (no penalty)
+                if ($verdict === 'keep') {
+                    $classification->final_decision = $confidence >= $confidenceThreshold
+                        ? Classification::DECISION_KEEP
+                        : Classification::DECISION_BORDERLINE;
+                    $classification->combined_score = $confidence;
+                } else {
+                    $classification->final_decision = Classification::DECISION_DISCARD;
+                    $classification->combined_score = 0.0;
+                }
             }
         } elseif ($gptCompleted && ! $kimiCompleted) {
             $verdict = $results['openai']['response']->verdict;
@@ -360,11 +367,16 @@ class ScanClassifyCommand extends Command
                 );
                 $classification->combined_score = $verdict === 'keep' ? $confidence : 0.0;
             } else {
-                // Partial failure: reduce confidence
-                $classification->final_decision = $verdict === 'keep'
-                    ? Classification::DECISION_BORDERLINE
-                    : Classification::DECISION_DISCARD;
-                $classification->combined_score = $verdict === 'keep' ? $confidence * 0.5 : 0.0;
+                // Partial failure: use confidence threshold for decision (no penalty)
+                if ($verdict === 'keep') {
+                    $classification->final_decision = $confidence >= $confidenceThreshold
+                        ? Classification::DECISION_KEEP
+                        : Classification::DECISION_BORDERLINE;
+                    $classification->combined_score = $confidence;
+                } else {
+                    $classification->final_decision = Classification::DECISION_DISCARD;
+                    $classification->combined_score = 0.0;
+                }
             }
         }
 
@@ -409,6 +421,8 @@ class ScanClassifyCommand extends Command
         }
 
         // Calculate final decision - use same logic as processAndFinalizeClassification but without DB calls
+        $confidenceThreshold = 0.7;
+
         if ($kimiCompleted && $gptCompleted) {
             // Both providers succeeded - use consensus logic (mimic what processResults() does without saving)
             $shortcutDecision = Classification::checkShortcutRule(
@@ -445,10 +459,16 @@ class ScanClassifyCommand extends Command
                 );
                 $classification->combined_score = $verdict === 'keep' ? $confidence : 0.0;
             } else {
-                $classification->final_decision = $verdict === 'keep'
-                    ? Classification::DECISION_BORDERLINE
-                    : Classification::DECISION_DISCARD;
-                $classification->combined_score = $verdict === 'keep' ? $confidence * 0.5 : 0.0;
+                // Partial failure: use confidence threshold for decision (no penalty)
+                if ($verdict === 'keep') {
+                    $classification->final_decision = $confidence >= $confidenceThreshold
+                        ? Classification::DECISION_KEEP
+                        : Classification::DECISION_BORDERLINE;
+                    $classification->combined_score = $confidence;
+                } else {
+                    $classification->final_decision = Classification::DECISION_DISCARD;
+                    $classification->combined_score = 0.0;
+                }
             }
         } elseif ($gptCompleted && ! $kimiCompleted) {
             // Only GPT succeeded
@@ -461,10 +481,16 @@ class ScanClassifyCommand extends Command
                 );
                 $classification->combined_score = $verdict === 'keep' ? $confidence : 0.0;
             } else {
-                $classification->final_decision = $verdict === 'keep'
-                    ? Classification::DECISION_BORDERLINE
-                    : Classification::DECISION_DISCARD;
-                $classification->combined_score = $verdict === 'keep' ? $confidence * 0.5 : 0.0;
+                // Partial failure: use confidence threshold for decision (no penalty)
+                if ($verdict === 'keep') {
+                    $classification->final_decision = $confidence >= $confidenceThreshold
+                        ? Classification::DECISION_KEEP
+                        : Classification::DECISION_BORDERLINE;
+                    $classification->combined_score = $confidence;
+                } else {
+                    $classification->final_decision = Classification::DECISION_DISCARD;
+                    $classification->combined_score = 0.0;
+                }
             }
         }
 
