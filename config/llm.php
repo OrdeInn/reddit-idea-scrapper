@@ -13,7 +13,7 @@ return [
 
     'classification' => [
         // Which providers to use for classification (all run in parallel)
-        'providers' => ['openai-gpt4-mini'],
+        'providers' => ['anthropic-haiku', 'openai-gpt4-mini'],
 
         // Consensus score thresholds
         // score = average(confidence × keep_flag) across configured providers
@@ -52,18 +52,18 @@ return [
     */
 
     'providers' => [
-        // 'claude-haiku' => [
-        //     'class' => App\Services\LLM\ClaudeHaikuProvider::class,
-        //     'api_key' => env('ANTHROPIC_API_KEY', ''),
-        //     'model' => 'claude-3-5-haiku-20241022',
-        //     'max_tokens' => 1024,
-        //     'temperature' => 0.3,
-        // ],
+        'anthropic-haiku' => [
+            'class' => App\Services\LLM\AnthropicHaikuProvider::class,
+            'api_key' => env('ANTHROPIC_API_KEY', ''),
+            'model' => 'claude-haiku-4-5',
+            'max_tokens' => 1024,
+            'temperature' => 0.3,
+        ],
 
         'claude-sonnet' => [
             'class' => App\Services\LLM\ClaudeSonnetProvider::class,
             'api_key' => env('ANTHROPIC_API_KEY', ''),
-            'model' => 'claude-sonnet-4-5-20250929',
+            'model' => 'claude-sonnet-4-5',
             'max_tokens' => 4096,
             'temperature' => 0.5,
         ],
