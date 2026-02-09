@@ -12,11 +12,11 @@ return [
     */
 
     'classification' => [
-        // Which providers to use for classification (both run in parallel)
-        'providers' => ['synthetic-kimi', 'openai-gpt4-mini'],
+        // Which providers to use for classification (all run in parallel)
+        'providers' => ['openai-gpt4-mini'],
 
         // Consensus score thresholds
-        // score = (model1_confidence × model1_keep + model2_confidence × model2_keep) / 2
+        // score = average(confidence × keep_flag) across configured providers
         'consensus_threshold_keep' => 0.6,      // >= this = KEEP
         'consensus_threshold_discard' => 0.4,   // < this = DISCARD, between = BORDERLINE
 
@@ -76,13 +76,6 @@ return [
             'temperature' => 0.3,
         ],
 
-        'synthetic-kimi' => [
-            'class' => App\Services\LLM\SyntheticKimiProvider::class,
-            'api_key' => env('SYNTHETIC_API_KEY', ''),
-            'model' => 'hf:moonshotai/Kimi-K2.5',
-            'max_tokens' => 1024,
-            'temperature' => 0.3,
-        ],
     ],
 
     /*

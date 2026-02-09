@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Log;
 
 class ScanClassifyCommand extends Command
 {
-    protected $signature = 'scan:classify {--scan= : Scan ID to process posts from} {--post= : Single post ID to classify} {--limit= : Max posts to classify} {--provider=both : Provider to use (kimi, gpt, both)} {--dry-run : Run LLM but do not save results}';
+    protected $signature = 'scan:classify {--scan= : Scan ID to process posts from} {--post= : Single post ID to classify} {--limit= : Max posts to classify} {--provider=both : Provider to use (gpt, both)} {--dry-run : Run LLM but do not save results}';
 
     protected $description = 'Classify posts via LLM synchronously for debugging';
 
@@ -39,8 +39,8 @@ class ScanClassifyCommand extends Command
             }
 
             // Validate provider option
-            if (! in_array($provider, ['kimi', 'gpt', 'both'], true)) {
-                $this->error('--provider must be one of: kimi, gpt, both');
+            if (! in_array($provider, ['gpt', 'both'], true)) {
+                $this->error('--provider must be one of: gpt, both');
 
                 return self::FAILURE;
             }
@@ -227,7 +227,6 @@ class ScanClassifyCommand extends Command
     private function getProviders(LLMProviderFactory $factory, string $provider): array
     {
         return match ($provider) {
-            'kimi' => [LLMProviderFactory::make('synthetic-kimi')],
             'gpt' => [LLMProviderFactory::make('openai-gpt4-mini')],
             'both' => $factory->classificationProviders(),
         };
