@@ -14,11 +14,8 @@ use RuntimeException;
 
 /**
  * OpenAI GPT classifier provider for classification tasks.
- *
- * Note: The class name is legacy from when it used GPT-4o-mini. The configured model (see config/llm.php)
- * is now GPT-5-mini (gpt-5-mini-2025-08-07) for improved instruction-following and classification accuracy.
  */
-class OpenAIGPT4MiniProvider extends BaseLLMProvider
+class OpenAIProvider extends BaseLLMProvider
 {
     private const API_URL = 'https://api.openai.com/v1/chat/completions';
 

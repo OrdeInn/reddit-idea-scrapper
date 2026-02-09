@@ -4,13 +4,13 @@ namespace Tests\Feature\LLM;
 
 use App\Services\LLM\DTOs\ClassificationRequest;
 use App\Services\LLM\DTOs\ExtractionRequest;
-use App\Services\LLM\OpenAIGPT4MiniProvider;
+use App\Services\LLM\OpenAIProvider;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 use Tests\TestCase;
 
-class OpenAIGPT4MiniProviderTest extends TestCase
+class OpenAIProviderTest extends TestCase
 {
     private array $baseConfig;
 
@@ -59,7 +59,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             ]),
         ]);
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'I need a tool to manage my freelance invoices',
             postBody: 'Currently using spreadsheets and it\'s a mess',
@@ -104,7 +104,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             ]),
         ]);
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -147,7 +147,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             ]),
         ]);
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -202,7 +202,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             ]);
         });
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -217,7 +217,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
 
     public function test_extract_throws_exception(): void
     {
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ExtractionRequest(
             subreddit: 'test',
             postTitle: 'Test post',
@@ -236,21 +236,21 @@ class OpenAIGPT4MiniProviderTest extends TestCase
 
     public function test_supports_classification(): void
     {
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
 
         $this->assertTrue($provider->supportsClassification());
     }
 
     public function test_does_not_support_extraction(): void
     {
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
 
         $this->assertFalse($provider->supportsExtraction());
     }
 
     public function test_get_provider_name_returns_openai(): void
     {
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
 
         $this->assertEquals('openai', $provider->getProviderName());
     }
@@ -266,7 +266,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             ], 401),
         ]);
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -318,7 +318,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             ]);
         });
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -362,7 +362,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             ]),
         ]);
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Looking for a tool that does X',
             postBody: 'I need something that can help me with this specific task',
@@ -406,7 +406,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             ]),
         ]);
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -425,7 +425,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
 
     public function test_get_model_name_returns_configured_model(): void
     {
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
 
         $this->assertEquals('gpt-4o-mini', $provider->getModelName());
     }
@@ -467,7 +467,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             ]);
         });
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -525,7 +525,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             ]);
         });
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -571,7 +571,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             'https://api.openai.com/v1/chat/completions' => Http::response($rawApiResponse),
         ]);
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -595,7 +595,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             throw new ConnectionException('Connection timed out');
         });
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -621,7 +621,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             ),
         ]);
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -658,7 +658,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             ], 200),
         ]);
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -695,7 +695,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             ], 200),
         ]);
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -732,7 +732,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             ], 200),
         ]);
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -774,7 +774,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             ]);
         });
 
-        $provider = new OpenAIGPT4MiniProvider($this->baseConfig);
+        $provider = new OpenAIProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -830,7 +830,7 @@ class OpenAIGPT4MiniProviderTest extends TestCase
             ]);
         });
 
-        $provider = new OpenAIGPT4MiniProvider($config);
+        $provider = new OpenAIProvider($config);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',

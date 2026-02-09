@@ -12,7 +12,7 @@ use App\Services\LLM\DTOs\ClassificationRequest;
 use App\Services\LLM\DTOs\ClassificationResponse;
 use App\Services\LLM\LLMProviderFactory;
 use App\Services\LLM\LLMProviderInterface;
-use App\Services\LLM\OpenAIGPT4MiniProvider;
+use App\Services\LLM\OpenAIProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Mockery;
@@ -66,7 +66,7 @@ class ClassifyPostJobTest extends TestCase
         $this->mockKimiProvider->shouldReceive('getProviderName')->andReturn('synthetic');
         $this->mockKimiProvider->shouldReceive('getModelName')->andReturn('hf:moonshotai/Kimi-K2.5');
 
-        $this->mockGptProvider = Mockery::mock(OpenAIGPT4MiniProvider::class);
+        $this->mockGptProvider = Mockery::mock(OpenAIProvider::class);
         $this->mockGptProvider->shouldReceive('getProviderName')->andReturn('openai');
         $this->mockGptProvider->shouldReceive('getModelName')->andReturn('gpt-5-mini-2025-08-07');
     }

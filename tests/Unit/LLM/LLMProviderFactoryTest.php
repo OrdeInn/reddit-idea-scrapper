@@ -40,7 +40,7 @@ class LLMProviderFactoryTest extends TestCase
                     'temperature' => 0.3,
                 ],
                 'openai-gpt4-mini' => [
-                    'class' => \App\Services\LLM\OpenAIGPT4MiniProvider::class,
+                    'class' => \App\Services\LLM\OpenAIProvider::class,
                     'api_key' => 'test-openai-key',
                     'model' => 'gpt-4o-mini',
                     'max_tokens' => 1024,
@@ -54,7 +54,7 @@ class LLMProviderFactoryTest extends TestCase
 
         $this->assertCount(2, $providers);
         $this->assertInstanceOf(\App\Services\LLM\ClaudeSonnetProvider::class, $providers[0]);
-        $this->assertInstanceOf(\App\Services\LLM\OpenAIGPT4MiniProvider::class, $providers[1]);
+        $this->assertInstanceOf(\App\Services\LLM\OpenAIProvider::class, $providers[1]);
 
         foreach ($providers as $provider) {
             $this->assertInstanceOf(LLMProviderInterface::class, $provider);
