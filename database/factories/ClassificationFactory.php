@@ -20,33 +20,33 @@ class ClassificationFactory extends Factory
     {
         return [
             'post_id' => Post::factory(),
-            'kimi_verdict' => null,
-            'kimi_confidence' => null,
-            'kimi_category' => null,
-            'kimi_reasoning' => null,
+            'haiku_verdict' => null,
+            'haiku_confidence' => null,
+            'haiku_category' => null,
+            'haiku_reasoning' => null,
             'gpt_verdict' => null,
             'gpt_confidence' => null,
             'gpt_category' => null,
             'gpt_reasoning' => null,
             'combined_score' => null,
             'final_decision' => 'pending',
-            'kimi_completed' => false,
+            'haiku_completed' => false,
             'gpt_completed' => false,
             'classified_at' => null,
         ];
     }
 
     /**
-     * State for incomplete classification (Kimi not done).
+     * State for incomplete classification (Haiku not done).
      */
-    public function kimiIncomplete(): static
+    public function haikuIncomplete(): static
     {
         return $this->state(fn (array $attributes) => [
-            'kimi_verdict' => null,
-            'kimi_confidence' => null,
-            'kimi_category' => null,
-            'kimi_reasoning' => null,
-            'kimi_completed' => false,
+            'haiku_verdict' => null,
+            'haiku_confidence' => null,
+            'haiku_category' => null,
+            'haiku_reasoning' => null,
+            'haiku_completed' => false,
         ]);
     }
 
@@ -70,11 +70,11 @@ class ClassificationFactory extends Factory
     public function keep(): static
     {
         return $this->state(fn (array $attributes) => [
-            'kimi_verdict' => 'keep',
+            'haiku_verdict' => 'keep',
             'gpt_verdict' => 'keep',
-            'kimi_confidence' => 0.9,
+            'haiku_confidence' => 0.9,
             'gpt_confidence' => 0.9,
-            'kimi_category' => $this->faker->randomElement([
+            'haiku_category' => $this->faker->randomElement([
                 Classification::CATEGORY_GENUINE_PROBLEM,
                 Classification::CATEGORY_TOOL_REQUEST,
             ]),
@@ -82,11 +82,11 @@ class ClassificationFactory extends Factory
                 Classification::CATEGORY_GENUINE_PROBLEM,
                 Classification::CATEGORY_TOOL_REQUEST,
             ]),
-            'kimi_reasoning' => $this->faker->sentence(),
+            'haiku_reasoning' => $this->faker->sentence(),
             'gpt_reasoning' => $this->faker->sentence(),
             'final_decision' => Classification::DECISION_KEEP,
             'combined_score' => 0.9,
-            'kimi_completed' => true,
+            'haiku_completed' => true,
             'gpt_completed' => true,
             'classified_at' => now(),
         ]);
@@ -98,17 +98,17 @@ class ClassificationFactory extends Factory
     public function discard(): static
     {
         return $this->state(fn (array $attributes) => [
-            'kimi_verdict' => 'skip',
+            'haiku_verdict' => 'skip',
             'gpt_verdict' => 'skip',
-            'kimi_confidence' => 0.9,
+            'haiku_confidence' => 0.9,
             'gpt_confidence' => 0.9,
-            'kimi_category' => Classification::CATEGORY_SPAM,
+            'haiku_category' => Classification::CATEGORY_SPAM,
             'gpt_category' => Classification::CATEGORY_SPAM,
-            'kimi_reasoning' => $this->faker->sentence(),
+            'haiku_reasoning' => $this->faker->sentence(),
             'gpt_reasoning' => $this->faker->sentence(),
             'final_decision' => Classification::DECISION_DISCARD,
             'combined_score' => 0.0,
-            'kimi_completed' => true,
+            'haiku_completed' => true,
             'gpt_completed' => true,
             'classified_at' => now(),
         ]);
@@ -120,17 +120,17 @@ class ClassificationFactory extends Factory
     public function borderline(): static
     {
         return $this->state(fn (array $attributes) => [
-            'kimi_verdict' => 'keep',
+            'haiku_verdict' => 'keep',
             'gpt_verdict' => 'skip',
-            'kimi_confidence' => 0.5,
+            'haiku_confidence' => 0.5,
             'gpt_confidence' => 0.5,
-            'kimi_category' => Classification::CATEGORY_ADVICE_THREAD,
+            'haiku_category' => Classification::CATEGORY_ADVICE_THREAD,
             'gpt_category' => Classification::CATEGORY_RANT,
-            'kimi_reasoning' => $this->faker->sentence(),
+            'haiku_reasoning' => $this->faker->sentence(),
             'gpt_reasoning' => $this->faker->sentence(),
             'final_decision' => Classification::DECISION_BORDERLINE,
             'combined_score' => 0.25,
-            'kimi_completed' => true,
+            'haiku_completed' => true,
             'gpt_completed' => true,
             'classified_at' => now(),
         ]);
