@@ -10,7 +10,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
-class ClaudeSonnetProvider extends BaseLLMProvider
+class AnthropicSonnetProvider extends BaseLLMProvider
 {
     private const API_URL = 'https://api.anthropic.com/v1/messages';
     private const API_VERSION = '2023-06-01';
@@ -20,7 +20,7 @@ class ClaudeSonnetProvider extends BaseLLMProvider
      */
     public function getProviderName(): string
     {
-        return 'anthropic';
+        return 'anthropic-sonnet';
     }
 
     /**
@@ -56,7 +56,7 @@ class ClaudeSonnetProvider extends BaseLLMProvider
      */
     public function classify(ClassificationRequest $request): ClassificationResponse
     {
-        Log::warning('Using Claude Sonnet for classification is not cost-effective', [
+        Log::warning('Using Anthropic Sonnet for classification is not cost-effective', [
             'provider' => $this->getProviderName(),
             'model' => $this->model,
         ]);
@@ -99,7 +99,7 @@ class ClaudeSonnetProvider extends BaseLLMProvider
                 postId: $request->postId
             );
 
-            Log::error('Claude Sonnet API connection error', [
+            Log::error('Anthropic Sonnet API connection error', [
                 'error' => $e->getMessage(),
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
@@ -132,14 +132,14 @@ class ClaudeSonnetProvider extends BaseLLMProvider
                 postId: $request->postId
             );
 
-            Log::error('Claude Sonnet API error', [
+            Log::error('Anthropic Sonnet API error', [
                 'status' => $status,
                 'error' => $error,
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
             ]);
 
-            throw new RuntimeException("Claude Sonnet API error ({$status}): {$error}");
+            throw new RuntimeException("Anthropic Sonnet API error ({$status}): {$error}");
         }
 
         $data = $response->json();
@@ -158,7 +158,7 @@ class ClaudeSonnetProvider extends BaseLLMProvider
                 postId: $request->postId
             );
 
-            Log::warning('Claude Sonnet API returned invalid JSON response', [
+            Log::warning('Anthropic Sonnet API returned invalid JSON response', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
             ]);
@@ -190,7 +190,7 @@ class ClaudeSonnetProvider extends BaseLLMProvider
                 postId: $request->postId
             );
 
-            Log::warning('Claude Sonnet API returned empty content', [
+            Log::warning('Anthropic Sonnet API returned empty content', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
             ]);
@@ -220,7 +220,7 @@ class ClaudeSonnetProvider extends BaseLLMProvider
                 postId: $request->postId
             );
 
-            Log::warning('Failed to parse Claude Sonnet JSON response', [
+            Log::warning('Failed to parse Anthropic Sonnet JSON response', [
                 'content_length' => strlen($content),
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
@@ -250,7 +250,7 @@ class ClaudeSonnetProvider extends BaseLLMProvider
     }
 
     /**
-     * Extract SaaS ideas from a Reddit post using Claude Sonnet.
+     * Extract SaaS ideas from a Reddit post using Anthropic Sonnet.
      */
     public function extract(ExtractionRequest $request): ExtractionResponse
     {
@@ -292,7 +292,7 @@ class ClaudeSonnetProvider extends BaseLLMProvider
                 postId: $request->postId
             );
 
-            Log::error('Claude Sonnet API connection error during extraction', [
+            Log::error('Anthropic Sonnet API connection error during extraction', [
                 'error' => $e->getMessage(),
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
@@ -322,14 +322,14 @@ class ClaudeSonnetProvider extends BaseLLMProvider
                 postId: $request->postId
             );
 
-            Log::error('Claude Sonnet API error during extraction', [
+            Log::error('Anthropic Sonnet API error during extraction', [
                 'status' => $status,
                 'error' => $error,
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
             ]);
 
-            throw new RuntimeException("Claude Sonnet API error ({$status}): {$error}");
+            throw new RuntimeException("Anthropic Sonnet API error ({$status}): {$error}");
         }
 
         $data = $response->json();
@@ -348,7 +348,7 @@ class ClaudeSonnetProvider extends BaseLLMProvider
                 postId: $request->postId
             );
 
-            Log::warning('Claude Sonnet API returned invalid JSON response during extraction', [
+            Log::warning('Anthropic Sonnet API returned invalid JSON response during extraction', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
             ]);
@@ -377,7 +377,7 @@ class ClaudeSonnetProvider extends BaseLLMProvider
                 postId: $request->postId
             );
 
-            Log::warning('Claude Sonnet API returned empty content during extraction', [
+            Log::warning('Anthropic Sonnet API returned empty content during extraction', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
             ]);
@@ -391,7 +391,7 @@ class ClaudeSonnetProvider extends BaseLLMProvider
         // Check for truncated output (max_tokens reached)
         $stopReason = $data['stop_reason'] ?? null;
         if ($stopReason === 'max_tokens') {
-            Log::warning('Claude Sonnet response was truncated due to max_tokens', [
+            Log::warning('Anthropic Sonnet response was truncated due to max_tokens', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
             ]);

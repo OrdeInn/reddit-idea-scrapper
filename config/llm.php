@@ -61,7 +61,7 @@ return [
         ],
 
         'claude-sonnet' => [
-            'class' => App\Services\LLM\ClaudeSonnetProvider::class,
+            'class' => App\Services\LLM\AnthropicSonnetProvider::class,
             'api_key' => env('ANTHROPIC_API_KEY', ''),
             'model' => 'claude-sonnet-4-5',
             'max_tokens' => 4096,
