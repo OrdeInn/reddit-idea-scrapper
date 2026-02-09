@@ -157,6 +157,22 @@ abstract class BaseLLMProvider implements LLMProviderInterface
         }
 
         if (is_array($content)) {
+            // If content is a single associative object, try common text fields directly.
+            if (! array_is_list($content)) {
+                $text = $this->extractTextFromContentPart($content);
+                if ($text !== null && trim($text) !== '') {
+                    return trim($text);
+                }
+
+                // Fall back to joining string values (best-effort).
+                $strings = array_values(array_filter($content, fn ($v) => is_string($v) && trim($v) !== ''));
+                if (! empty($strings)) {
+                    return trim(implode("\n", $strings));
+                }
+
+                return '';
+            }
+
             // Common format: [{ "type": "text", "text": "..." }, ...]
             $parts = [];
 
@@ -166,8 +182,13 @@ abstract class BaseLLMProvider implements LLMProviderInterface
                     continue;
                 }
 
-                if (is_array($part) && isset($part['text']) && is_string($part['text'])) {
-                    $parts[] = $part['text'];
+                if (is_array($part)) {
+                    $text = $this->extractTextFromContentPart($part);
+                    if ($text !== null && trim($text) !== '') {
+                        $parts[] = $text;
+                        continue;
+                    }
+
                     continue;
                 }
             }
@@ -179,13 +200,50 @@ abstract class BaseLLMProvider implements LLMProviderInterface
     }
 
     /**
+     * Extract text from a single content-part array.
+     *
+     * Different OpenAI-compatible APIs return slightly different shapes.
+     */
+    private function extractTextFromContentPart(array $part): ?string
+    {
+        // Most common: { text: "..." }
+        if (isset($part['text']) && is_string($part['text'])) {
+            return $part['text'];
+        }
+
+        // Some variants: { content: "..." }
+        if (isset($part['content']) && is_string($part['content'])) {
+            return $part['content'];
+        }
+
+        // Nested: { text: { value: "..." } }
+        if (isset($part['text']) && is_array($part['text']) && isset($part['text']['value']) && is_string($part['text']['value'])) {
+            return $part['text']['value'];
+        }
+
+        // Nested: { text: { content: "..." } }
+        if (isset($part['text']) && is_array($part['text']) && isset($part['text']['content']) && is_string($part['text']['content'])) {
+            return $part['text']['content'];
+        }
+
+        // Rare: { output_text: "..." }
+        if (isset($part['output_text']) && is_string($part['output_text'])) {
+            return $part['output_text'];
+        }
+
+        return null;
+    }
+
+    /**
      * Whether to include potentially sensitive response snippets in logs.
      *
      * Snippets can include user-generated content; prefer hashing in non-local environments.
      */
     protected function shouldIncludeSensitiveLogData(): bool
     {
-        return app()->environment(['local', 'testing']) && (bool) config('app.debug', false);
+        // This project is intended to run locally; for debugging we always include snippets in local/testing.
+        // Production defaults to hashed-only unless a future flag is introduced.
+        return app()->environment(['local', 'testing']);
     }
 
     /**

@@ -65,8 +65,6 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
     {
         $requestPayload = [
             'model' => $this->model,
-            'max_tokens' => $this->maxTokens,
-            'temperature' => $this->temperature,
             'response_format' => ['type' => 'json_object'],
             'messages' => [
                 [
@@ -79,6 +77,11 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
                 ],
             ],
         ];
+        $requestPayload[$this->getMaxTokensParamName()] = $this->maxTokens;
+        $temperature = $this->getTemperaturePayloadValue();
+        if ($temperature !== null) {
+            $requestPayload['temperature'] = $temperature;
+        }
 
         $requestId = $this->getLogger()->logRequest(
             provider: $this->getProviderName(),
@@ -150,14 +153,14 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
             if ($status >= 500 || $status === 429) {
                 // Server errors and rate limiting - transient
                 throw new TransientClassificationException(
-                    message: "OpenAI API returned status {$status}",
+                    message: "OpenAI API returned status {$status}: {$error}",
                     provider: $this->getProviderName()
                 );
             }
 
             // 4xx errors (except 429) - permanent
             throw new PermanentClassificationException(
-                message: "OpenAI API returned status {$status}",
+                message: "OpenAI API returned status {$status}: {$error}",
                 provider: $this->getProviderName()
             );
         }
@@ -232,8 +235,47 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
         }
 
         // Extract content from response
-        $contentRaw = $data['choices'][0]['message']['content'] ?? null;
+        $message = $data['choices'][0]['message'] ?? null;
+        $contentRaw = is_array($message) ? ($message['content'] ?? null) : null;
         $content = $this->normalizeMessageContent($contentRaw);
+
+        // Fallback 1: Some OpenAI-compatible responses may return tool/function call arguments instead of message content.
+        if ($content === '' && is_array($message)) {
+            $toolCalls = $message['tool_calls'] ?? null;
+            if (is_array($toolCalls) && isset($toolCalls[0]['function']['arguments']) && is_string($toolCalls[0]['function']['arguments'])) {
+                $content = trim($toolCalls[0]['function']['arguments']);
+            } elseif (isset($message['function_call']['arguments']) && is_string($message['function_call']['arguments'])) {
+                $content = trim($message['function_call']['arguments']);
+            }
+        }
+
+        // Fallback 2: Refusal payload without content should be treated as a skip (not a transient provider failure).
+        if ($content === '' && is_array($message) && isset($message['refusal']) && is_string($message['refusal']) && trim($message['refusal']) !== '') {
+            $parsedResult = [
+                'verdict' => 'skip',
+                'confidence' => 0.0,
+                'category' => 'refusal',
+                'reasoning' => $message['refusal'],
+            ];
+
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'classification',
+                parsedResult: $parsedResult,
+                durationMs: $durationMs,
+                success: true,
+                postId: $request->postId
+            );
+
+            Log::warning('OpenAI refusal returned (no content)', [
+                'provider' => $this->getProviderName(),
+                'model' => $this->model,
+            ]);
+
+            return ClassificationResponse::fromJson($parsedResult, $rawResponse);
+        }
 
         if ($content === '') {
             $this->getLogger()->logResponse(
@@ -241,7 +283,9 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
                 provider: $this->getProviderName(),
                 model: $this->model,
                 operation: 'classification',
-                parsedResult: [],
+                parsedResult: [
+                    'raw_response' => $rawResponse,
+                ],
                 durationMs: $durationMs,
                 success: false,
                 error: 'Response content is empty',
@@ -251,6 +295,13 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
             Log::warning('OpenAI API returned empty content', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
+                'finish_reason' => $finishReason,
+                'content_raw_type' => gettype($contentRaw),
+                'message_keys' => is_array($message) ? array_keys($message) : null,
+                'status' => $response->status(),
+                'body_length' => strlen($response->body()),
+                'body_sha256' => hash('sha256', $response->body()),
+                'body_snippet' => substr($response->body(), 0, 2000),
             ]);
 
             throw new TransientClassificationException(
@@ -329,5 +380,29 @@ class OpenAIGPT4MiniProvider extends BaseLLMProvider
     public function supportsExtraction(): bool
     {
         return false;
+    }
+
+    /**
+     * Some newer OpenAI models reject `max_tokens` and require `max_completion_tokens`.
+     */
+    private function getMaxTokensParamName(): string
+    {
+        // Keep this intentionally conservative to avoid breaking older chat-completions models.
+        // gpt-5* models currently require max_completion_tokens.
+        return str_starts_with($this->model, 'gpt-5') ? 'max_completion_tokens' : 'max_tokens';
+    }
+
+    /**
+     * Some newer OpenAI models only support the default temperature.
+     *
+     * Return null to omit temperature and let the API default apply.
+     */
+    private function getTemperaturePayloadValue(): ?float
+    {
+        if (str_starts_with($this->model, 'gpt-5')) {
+            return null;
+        }
+
+        return $this->temperature;
     }
 }

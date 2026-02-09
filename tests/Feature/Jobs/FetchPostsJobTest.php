@@ -189,6 +189,7 @@ class FetchPostsJobTest extends TestCase
                 'startups',
                 \Mockery::on(function ($date) use (&$capturedAfter) {
                     $capturedAfter = $date;
+
                     return $date instanceof Carbon;
                 }),
                 \Mockery::any(),
@@ -214,11 +215,13 @@ class FetchPostsJobTest extends TestCase
         $this->assertTrue($capturedAfter->lessThanOrEqualTo($now), 'Expected captured date to be in the past');
 
         $daysDiff = $capturedAfter->diffInDays($now);
-        $expectedMonths = (int) config('reddit.fetch.default_timeframe_months', 3);
-        $this->assertGreaterThan(0, $expectedMonths, 'Timeframe months should be positive');
+        // $expectedMonths = (int) config('reddit.fetch.default_timeframe_months', 3);
+        $expectedWeeks = (int) config('reddit.fetch.default_timeframe_weeks', 3);
 
-        $expectedDaysMin = ($expectedMonths * 30) - 5; // Buffer for month variation
-        $expectedDaysMax = ($expectedMonths * 31) + 5;
+        $this->assertGreaterThan(0, $expectedWeeks, 'Timeframe weeks should be positive');
+
+        $expectedDaysMin = ($expectedWeeks * 7) - 5; // Buffer for week variation
+        $expectedDaysMax = ($expectedWeeks * 7) + 5;
         $this->assertGreaterThanOrEqual($expectedDaysMin, $daysDiff);
         $this->assertLessThanOrEqual($expectedDaysMax, $daysDiff);
     }
@@ -243,6 +246,7 @@ class FetchPostsJobTest extends TestCase
                 'startups',
                 \Mockery::on(function ($date) use (&$capturedAfter) {
                     $capturedAfter = $date;
+
                     return $date instanceof Carbon;
                 }),
                 \Mockery::any(),
@@ -295,6 +299,7 @@ class FetchPostsJobTest extends TestCase
             )
             ->andReturnUsing(function () use (&$checkpointUsed) {
                 $checkpointUsed = true;
+
                 return [
                     'posts' => collect([]),
                     'after' => null,

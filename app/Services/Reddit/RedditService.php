@@ -189,6 +189,19 @@ class RedditService
         ?string $afterCursor = null,
         int $limit = 100
     ): array {
+        // Note: Reddit's search endpoint can return 0 results for timestamp-only queries
+        // even for very active subreddits. For reliability, we always use the listing
+        // endpoint and apply date filtering in-process.
+        if ($after || $before) {
+            return $this->getSubredditPostsFromListingWithDateFilter(
+                subreddit: $subreddit,
+                after: $after,
+                before: $before,
+                afterCursor: $afterCursor,
+                limit: $limit,
+            );
+        }
+
         $query = [
             'limit' => min($limit, 100),
             'raw_json' => 1,
@@ -196,11 +209,6 @@ class RedditService
 
         if ($afterCursor) {
             $query['after'] = $afterCursor;
-        }
-
-        // Use search endpoint for date filtering
-        if ($after || $before) {
-            return $this->searchSubredditPosts($subreddit, $after, $before, $afterCursor, $limit);
         }
 
         $response = $this->request('get', "/r/{$subreddit}/new.json", $query);
@@ -221,6 +229,84 @@ class RedditService
     }
 
     /**
+     * Fetch posts from the listing endpoint and filter by date range in-process.
+     *
+     * Reddit search can be unreliable for timestamp-only queries; this method
+     * trades additional pagination for correctness.
+     *
+     * @return array{posts: Collection<RedditPost>, after: string|null}
+     */
+    private function getSubredditPostsFromListingWithDateFilter(
+        string $subreddit,
+        ?Carbon $after,
+        ?Carbon $before,
+        ?string $afterCursor,
+        int $limit
+    ): array {
+        $query = [
+            'limit' => min($limit, 100),
+            'raw_json' => 1,
+        ];
+
+        if ($afterCursor) {
+            $query['after'] = $afterCursor;
+        }
+
+        $response = $this->request('get', "/r/{$subreddit}/new.json", $query);
+
+        if (!isset($response['data']['children']) || !is_array($response['data']['children'])) {
+            Log::warning('Unexpected Reddit API response structure', ['response' => $response]);
+            return ['posts' => collect(), 'after' => null];
+        }
+
+        $children = $response['data']['children'] ?? [];
+        $rawCount = is_array($children) ? count($children) : 0;
+
+        $posts = collect($children)
+            ->map(fn ($item) => RedditPost::fromApiResponse($item['data']))
+            ->filter(fn (RedditPost $post) => $this->meetsEngagementThreshold($post))
+            ->filter(function (RedditPost $post) use ($after, $before): bool {
+                if ($after && $post->redditCreatedAt->lt($after)) {
+                    return false;
+                }
+
+                if ($before && $post->redditCreatedAt->gt($before)) {
+                    return false;
+                }
+
+                return true;
+            });
+
+        $nextCursor = $response['data']['after'] ?? null;
+
+        // Early stop: if we've paged past the lower bound, further pages will only be older.
+        if ($after && $rawCount > 0) {
+            $oldestCreatedUtc = collect($children)
+                ->map(fn ($item) => (int) (($item['data']['created_utc'] ?? 0)))
+                ->min();
+
+            if (is_int($oldestCreatedUtc) && $oldestCreatedUtc > 0 && $oldestCreatedUtc < $after->timestamp) {
+                $nextCursor = null;
+            }
+        }
+
+        Log::debug('Reddit listing returned posts (date filtered)', [
+            'subreddit' => $subreddit,
+            'raw_count' => $rawCount,
+            'filtered_count' => $posts->count(),
+            'after' => $after?->toIso8601String(),
+            'before' => $before?->toIso8601String(),
+            'after_cursor' => $response['data']['after'] ?? null,
+            'next_cursor' => $nextCursor,
+        ]);
+
+        return [
+            'posts' => $posts,
+            'after' => $nextCursor,
+        ];
+    }
+
+    /**
      * Search subreddit posts with date filtering.
      */
     private function searchSubredditPosts(
@@ -233,7 +319,9 @@ class RedditService
         $query = [
             'limit' => min($limit, 100),
             'sort' => 'new',
+            't' => 'all',
             'restrict_sr' => 'true',
+            'syntax' => 'cloudsearch',
             'raw_json' => 1,
         ];
 
@@ -261,6 +349,14 @@ class RedditService
         $posts = collect($response['data']['children'] ?? [])
             ->map(fn($item) => RedditPost::fromApiResponse($item['data']))
             ->filter(fn($post) => $this->meetsEngagementThreshold($post));
+
+        Log::debug('Reddit search returned posts', [
+            'subreddit' => $subreddit,
+            'raw_count' => count($response['data']['children'] ?? []),
+            'filtered_count' => $posts->count(),
+            'query' => $query['q'] ?? null,
+            'after' => $response['data']['after'] ?? null,
+        ]);
 
         return [
             'posts' => $posts,

@@ -786,4 +786,60 @@ class OpenAIGPT4MiniProviderTest extends TestCase
 
         $provider->classify($request);
     }
+
+    public function test_gpt5_uses_max_completion_tokens_and_omits_temperature(): void
+    {
+        $config = $this->baseConfig;
+        $config['model'] = 'gpt-5-mini-2025-08-07';
+
+        Http::fake(function ($request) {
+            $body = json_decode($request->body(), true);
+
+            $this->assertArrayHasKey('max_completion_tokens', $body);
+            $this->assertEquals(1024, $body['max_completion_tokens']);
+            $this->assertArrayNotHasKey('max_tokens', $body);
+
+            // gpt-5* models currently only support default temperature, so we omit it.
+            $this->assertArrayNotHasKey('temperature', $body);
+
+            return Http::response([
+                'id' => 'chatcmpl-test',
+                'object' => 'chat.completion',
+                'created' => time(),
+                'model' => 'gpt-5-mini-2025-08-07',
+                'choices' => [
+                    [
+                        'index' => 0,
+                        'message' => [
+                            'role' => 'assistant',
+                            'content' => json_encode([
+                                'verdict' => 'skip',
+                                'confidence' => 0.3,
+                                'category' => 'other',
+                                'reasoning' => 'Not relevant',
+                            ]),
+                        ],
+                        'finish_reason' => 'stop',
+                    ],
+                ],
+                'usage' => [
+                    'prompt_tokens' => 500,
+                    'completion_tokens' => 50,
+                    'total_tokens' => 550,
+                ],
+            ]);
+        });
+
+        $provider = new OpenAIGPT4MiniProvider($config);
+        $request = new ClassificationRequest(
+            postTitle: 'Test post',
+            postBody: 'Test body',
+            comments: [],
+            upvotes: 10,
+            numComments: 2,
+            subreddit: 'test',
+        );
+
+        $provider->classify($request);
+    }
 }

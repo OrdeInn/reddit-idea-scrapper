@@ -4,6 +4,10 @@ namespace App\Services\LLM\DTOs;
 
 class ClassificationRequest
 {
+    private const MAX_POST_BODY_CHARS = 4000;
+    private const MAX_COMMENTS_TOTAL_CHARS = 12000;
+    private const MAX_COMMENT_BODY_CHARS = 800;
+
     public function __construct(
         public readonly string $postTitle,
         public readonly ?string $postBody,
@@ -50,9 +54,28 @@ class ClassificationRequest
             return '(No comments)';
         }
 
-        return collect($this->comments)
-            ->map(fn ($c) => "[{$c['upvotes']} upvotes] {$c['author']}: {$c['body']}")
-            ->implode("\n\n");
+        $chunks = [];
+        $totalChars = 0;
+
+        foreach ($this->comments as $comment) {
+            $author = (string) ($comment['author'] ?? 'unknown');
+            $upvotes = (int) ($comment['upvotes'] ?? 0);
+            $body = (string) ($comment['body'] ?? '');
+
+            $body = $this->truncateText($body, self::MAX_COMMENT_BODY_CHARS);
+            $line = "[{$upvotes} upvotes] {$author}: {$body}";
+
+            $lineLen = strlen($line);
+            if ($totalChars + $lineLen > self::MAX_COMMENTS_TOTAL_CHARS) {
+                $chunks[] = '... [COMMENTS TRUNCATED]';
+                break;
+            }
+
+            $chunks[] = $line;
+            $totalChars += $lineLen;
+        }
+
+        return implode("\n\n", $chunks);
     }
 
     /**
@@ -61,6 +84,7 @@ class ClassificationRequest
     public function getPromptContent(): string
     {
         $body = $this->postBody ?: '(No body text - link post)';
+        $body = $this->truncateText($body, self::MAX_POST_BODY_CHARS);
 
         return <<<PROMPT
 Analyze this Reddit post and its comments. Determine if it contains a genuine problem, pain point, or tool request that could inspire a SaaS product idea suitable for small teams (2-3 developers) with limited budgets.
@@ -194,6 +218,21 @@ IMPORTANT INVARIANTS:
   - Else if points.total in 4-6 range ⇒ "low-score" (verdict will be "skip" per thresholds)
   - Default fallback ⇒ "other" only if verdict cannot be clearly determined
 PROMPT;
+    }
+
+    private function truncateText(string $text, int $maxChars): string
+    {
+        $text = trim($text);
+
+        if ($maxChars <= 0) {
+            return '';
+        }
+
+        if (strlen($text) <= $maxChars) {
+            return $text;
+        }
+
+        return rtrim(substr($text, 0, $maxChars)) . '... [TRUNCATED]';
     }
 
     /**

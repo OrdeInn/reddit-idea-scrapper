@@ -48,17 +48,20 @@ class FetchPostsJob implements ShouldQueue
         // Guard: Skip if scan no longer exists or is in a terminal state
         if (! $scan) {
             Log::warning('Scan no longer exists, skipping fetch', ['scan_id' => $this->scan->id]);
+
             return;
         }
 
         if ($scan->isFailed() || $scan->isCompleted()) {
             Log::info('Scan already finished, skipping fetch', ['scan_id' => $scan->id, 'status' => $scan->status]);
+
             return;
         }
 
         // Only proceed if scan is pending or already fetching
         if (! in_array($scan->status, [Scan::STATUS_PENDING, Scan::STATUS_FETCHING], true)) {
             Log::info('Scan is past fetching stage, skipping', ['scan_id' => $scan->id, 'status' => $scan->status]);
+
             return;
         }
 
@@ -73,7 +76,7 @@ class FetchPostsJob implements ShouldQueue
             $dateTo = $scan->date_to ?? now();
 
             // Update scan with date range if not set
-            if (!$scan->date_from) {
+            if (! $scan->date_from) {
                 $scan->update([
                     'date_from' => $dateFrom,
                     'date_to' => $dateTo,
@@ -143,13 +146,14 @@ class FetchPostsJob implements ShouldQueue
             return now()->subWeeks(config('reddit.fetch.rescan_timeframe_weeks', 2));
         }
 
-        return now()->subMonths(config('reddit.fetch.default_timeframe_months', 3));
+        // return now()->subMonths(config('reddit.fetch.default_timeframe_months', 3));
+        return now()->subWeeks(config('reddit.fetch.default_timeframe_weeks', 3));
     }
 
     /**
      * Store fetched posts in the database.
      *
-     * @param Collection<RedditPost> $posts
+     * @param  Collection<RedditPost>  $posts
      */
     private function storePosts(Collection $posts, Scan $scan): int
     {
@@ -170,6 +174,7 @@ class FetchPostsJob implements ShouldQueue
                         'fetched_at' => now(),
                         'scan_id' => $scan->id, // Associate with current scan for rescan support
                     ]);
+
                     continue;
                 }
 
@@ -205,6 +210,7 @@ class FetchPostsJob implements ShouldQueue
                 'scan_id' => $scan->id,
             ]);
             $scan->updateStatus(Scan::STATUS_CLASSIFYING);
+
             return;
         }
 
@@ -238,6 +244,6 @@ class FetchPostsJob implements ShouldQueue
             'error' => $exception->getMessage(),
         ]);
 
-        $this->scan->markAsFailed('Failed to fetch posts: ' . $exception->getMessage());
+        $this->scan->markAsFailed('Failed to fetch posts: '.$exception->getMessage());
     }
 }
