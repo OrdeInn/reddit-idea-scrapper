@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\LLM;
 
-use App\Services\LLM\ClaudeSonnetProvider;
+use App\Services\LLM\AnthropicSonnetProvider;
 use App\Services\LLM\DTOs\ClassificationRequest;
 use App\Services\LLM\DTOs\ExtractionRequest;
 use Illuminate\Http\Client\ConnectionException;
@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Tests\TestCase;
 
-class ClaudeSonnetProviderTest extends TestCase
+class AnthropicSonnetProviderTest extends TestCase
 {
     private array $baseConfig;
 
@@ -81,7 +81,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 200),
         ]);
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ExtractionRequest(
             subreddit: 'SaaS',
             postTitle: 'Need a simple metrics dashboard',
@@ -123,7 +123,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 200),
         ]);
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ExtractionRequest(
             subreddit: 'test',
             postTitle: 'Random discussion',
@@ -175,7 +175,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 200),
         ]);
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ExtractionRequest(
             subreddit: 'test',
             postTitle: 'Test',
@@ -231,7 +231,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 200),
         ]);
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ExtractionRequest(
             subreddit: 'test',
             postTitle: 'Test',
@@ -267,7 +267,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 200),
         ]);
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ExtractionRequest(
             subreddit: 'test',
             postTitle: 'Test',
@@ -311,7 +311,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 200),
         ]);
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'I need a tool to manage my freelance invoices',
             postBody: 'Currently using spreadsheets and it\'s a mess',
@@ -335,7 +335,7 @@ class ClaudeSonnetProviderTest extends TestCase
         // Mock Log to accept warning calls and channel() calls
         Log::shouldReceive('warning')
             ->once()
-            ->withArgs(fn ($message) => $message === 'Using Claude Sonnet for classification is not cost-effective')
+            ->withArgs(fn ($message) => $message === 'Using Anthropic Sonnet for classification is not cost-effective')
             ->andReturn();
 
         Log::shouldReceive('channel')
@@ -373,7 +373,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 200),
         ]);
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -394,7 +394,7 @@ class ClaudeSonnetProviderTest extends TestCase
             throw new ConnectionException('Connection timed out');
         });
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
 
         // Test classification returns safe fallback
         $classifyRequest = new ClassificationRequest(
@@ -442,7 +442,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 401),
         ]);
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -453,7 +453,7 @@ class ClaudeSonnetProviderTest extends TestCase
         );
 
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('Claude Sonnet API error (401)');
+        $this->expectExceptionMessage('Anthropic Sonnet API error (401)');
 
         $provider->classify($request);
     }
@@ -470,7 +470,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 429),
         ]);
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ExtractionRequest(
             subreddit: 'test',
             postTitle: 'Test',
@@ -482,7 +482,7 @@ class ClaudeSonnetProviderTest extends TestCase
         );
 
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('Claude Sonnet API error (429)');
+        $this->expectExceptionMessage('Anthropic Sonnet API error (429)');
 
         $provider->extract($request);
     }
@@ -504,7 +504,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 200),
         ]);
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
 
         // Test classification
         $classifyRequest = new ClassificationRequest(
@@ -559,7 +559,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 200),
         ]);
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
 
         // Test classification
         $classifyRequest = new ClassificationRequest(
@@ -597,28 +597,28 @@ class ClaudeSonnetProviderTest extends TestCase
 
     public function test_supports_classification(): void
     {
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
 
         $this->assertTrue($provider->supportsClassification());
     }
 
     public function test_supports_extraction(): void
     {
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
 
         $this->assertTrue($provider->supportsExtraction());
     }
 
-    public function test_get_provider_name_returns_anthropic(): void
+    public function test_get_provider_name_returns_anthropic_sonnet(): void
     {
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
 
-        $this->assertEquals('anthropic', $provider->getProviderName());
+        $this->assertEquals('anthropic-sonnet', $provider->getProviderName());
     }
 
     public function test_get_model_name_returns_configured_model(): void
     {
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
 
         $this->assertEquals('claude-sonnet-4-5-20250929', $provider->getModelName());
     }
@@ -662,7 +662,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 200);
         });
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -704,7 +704,7 @@ class ClaudeSonnetProviderTest extends TestCase
             'https://api.anthropic.com/v1/messages' => Http::response($rawApiResponse, 200),
         ]);
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -761,7 +761,7 @@ class ClaudeSonnetProviderTest extends TestCase
             'https://api.anthropic.com/v1/messages' => Http::response($rawApiResponse, 200),
         ]);
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ExtractionRequest(
             subreddit: 'test',
             postTitle: 'Test',
@@ -789,7 +789,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ),
         ]);
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -839,7 +839,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 200);
         });
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -885,7 +885,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 200);
         });
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ExtractionRequest(
             subreddit: 'test',
             postTitle: 'Test',
@@ -926,7 +926,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 200),
         ]);
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Looking for a tool that does X',
             postBody: 'I need something that can help me with this specific task',
@@ -978,7 +978,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 200);
         });
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',
@@ -1021,7 +1021,7 @@ class ClaudeSonnetProviderTest extends TestCase
             ], 200),
         ]);
 
-        $provider = new ClaudeSonnetProvider($this->baseConfig);
+        $provider = new AnthropicSonnetProvider($this->baseConfig);
         $request = new ClassificationRequest(
             postTitle: 'Test post',
             postBody: 'Test body',

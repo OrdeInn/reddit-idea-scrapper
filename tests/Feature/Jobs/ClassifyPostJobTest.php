@@ -8,10 +8,10 @@ use App\Models\Comment;
 use App\Models\Post;
 use App\Models\Scan;
 use App\Models\Subreddit;
+use App\Services\LLM\AnthropicHaikuProvider;
 use App\Services\LLM\DTOs\ClassificationRequest;
 use App\Services\LLM\DTOs\ClassificationResponse;
 use App\Services\LLM\LLMProviderFactory;
-use App\Services\LLM\LLMProviderInterface;
 use App\Services\LLM\OpenAIProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -24,7 +24,7 @@ class ClassifyPostJobTest extends TestCase
 
     private Scan $scan;
     private Post $post;
-    private $mockKimiProvider;
+    private $mockHaikuProvider;
     private $mockGptProvider;
 
     protected function setUp(): void
@@ -62,9 +62,9 @@ class ClassifyPostJobTest extends TestCase
         ]);
 
         // Create mock providers
-        $this->mockKimiProvider = Mockery::mock(LLMProviderInterface::class);
-        $this->mockKimiProvider->shouldReceive('getProviderName')->andReturn('synthetic');
-        $this->mockKimiProvider->shouldReceive('getModelName')->andReturn('hf:moonshotai/Kimi-K2.5');
+        $this->mockHaikuProvider = Mockery::mock(AnthropicHaikuProvider::class);
+        $this->mockHaikuProvider->shouldReceive('getProviderName')->andReturn('anthropic-haiku');
+        $this->mockHaikuProvider->shouldReceive('getModelName')->andReturn('claude-haiku-4-5-20251001');
 
         $this->mockGptProvider = Mockery::mock(OpenAIProvider::class);
         $this->mockGptProvider->shouldReceive('getProviderName')->andReturn('openai');
@@ -80,13 +80,13 @@ class ClassifyPostJobTest extends TestCase
     public function test_classifies_post_with_consensus(): void
     {
         // Mock providers to return different verdicts that result in borderline
-        $this->mockKimiProvider->shouldReceive('classify')
+        $this->mockHaikuProvider->shouldReceive('classify')
             ->once()
             ->andReturn(new ClassificationResponse(
                 verdict: 'keep',
                 confidence: 0.7,
                 category: Classification::CATEGORY_GENUINE_PROBLEM,
-                reasoning: 'Kimi thinks this is a genuine problem',
+                reasoning: 'Haiku thinks this is a genuine problem',
                 rawResponse: [],
             ));
 
@@ -101,7 +101,7 @@ class ClassifyPostJobTest extends TestCase
             ));
 
         // Mock the factory to return our mock providers
-        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+        $this->mockFactory([$this->mockHaikuProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
         $job->handle(app(LLMProviderFactory::class));
@@ -109,9 +109,9 @@ class ClassifyPostJobTest extends TestCase
         // Assert classification was created
         $this->assertDatabaseHas('classifications', [
             'post_id' => $this->post->id,
-            'kimi_verdict' => 'keep',
-            'kimi_confidence' => 0.7,
-            'kimi_category' => Classification::CATEGORY_GENUINE_PROBLEM,
+            'haiku_verdict' => 'keep',
+            'haiku_confidence' => 0.7,
+            'haiku_category' => Classification::CATEGORY_GENUINE_PROBLEM,
             'gpt_verdict' => 'keep',
             'gpt_confidence' => 0.8,
             'gpt_category' => Classification::CATEGORY_TOOL_REQUEST,
@@ -133,13 +133,13 @@ class ClassifyPostJobTest extends TestCase
     public function test_applies_shortcut_rule_for_unanimous_keep(): void
     {
         // Both providers agree with high confidence - should shortcut to keep
-        $this->mockKimiProvider->shouldReceive('classify')
+        $this->mockHaikuProvider->shouldReceive('classify')
             ->once()
             ->andReturn(new ClassificationResponse(
                 verdict: 'keep',
                 confidence: 0.9,
                 category: Classification::CATEGORY_GENUINE_PROBLEM,
-                reasoning: 'Strong keep from Kimi',
+                reasoning: 'Strong keep from Haiku',
                 rawResponse: [],
             ));
 
@@ -153,7 +153,7 @@ class ClassifyPostJobTest extends TestCase
                 rawResponse: [],
             ));
 
-        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+        $this->mockFactory([$this->mockHaikuProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
         $job->handle(app(LLMProviderFactory::class));
@@ -169,13 +169,13 @@ class ClassifyPostJobTest extends TestCase
     public function test_applies_shortcut_rule_for_unanimous_skip(): void
     {
         // Both providers agree to skip with high confidence - should shortcut to discard
-        $this->mockKimiProvider->shouldReceive('classify')
+        $this->mockHaikuProvider->shouldReceive('classify')
             ->once()
             ->andReturn(new ClassificationResponse(
                 verdict: 'skip',
                 confidence: 0.9,
                 category: Classification::CATEGORY_SPAM,
-                reasoning: 'Strong skip from Kimi',
+                reasoning: 'Strong skip from Haiku',
                 rawResponse: [],
             ));
 
@@ -189,7 +189,7 @@ class ClassifyPostJobTest extends TestCase
                 rawResponse: [],
             ));
 
-        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+        $this->mockFactory([$this->mockHaikuProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
         $job->handle(app(LLMProviderFactory::class));
@@ -204,12 +204,12 @@ class ClassifyPostJobTest extends TestCase
 
     public function test_retries_on_single_model_transient_failure(): void
     {
-        // Kimi throws transient error
-        $this->mockKimiProvider->shouldReceive('classify')
+        // Haiku throws transient error
+        $this->mockHaikuProvider->shouldReceive('classify')
             ->once()
             ->andThrow(new \App\Exceptions\TransientClassificationException(
                 'Temporary API error',
-                'synthetic'
+                'anthropic-haiku'
             ));
 
         // GPT succeeds
@@ -223,7 +223,7 @@ class ClassifyPostJobTest extends TestCase
                 rawResponse: [],
             ));
 
-        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+        $this->mockFactory([$this->mockHaikuProvider, $this->mockGptProvider]);
 
         // Mock the job to simulate first attempt (not final)
         $job = Mockery::mock(ClassifyPostJob::class, [$this->scan, $this->post])
@@ -247,12 +247,12 @@ class ClassifyPostJobTest extends TestCase
 
     public function test_uses_fallback_on_final_attempt_with_transient_error(): void
     {
-        // Kimi throws transient error
-        $this->mockKimiProvider->shouldReceive('classify')
+        // Haiku throws transient error
+        $this->mockHaikuProvider->shouldReceive('classify')
             ->once()
             ->andThrow(new \App\Exceptions\TransientClassificationException(
                 'Temporary API error',
-                'synthetic'
+                'anthropic-haiku'
             ));
 
         // GPT succeeds
@@ -266,7 +266,7 @@ class ClassifyPostJobTest extends TestCase
                 rawResponse: [],
             ));
 
-        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+        $this->mockFactory([$this->mockHaikuProvider, $this->mockGptProvider]);
 
         // Mock the job to simulate final attempt
         $job = Mockery::mock(ClassifyPostJob::class, [$this->scan, $this->post])
@@ -283,9 +283,9 @@ class ClassifyPostJobTest extends TestCase
         $classification = Classification::where('post_id', $this->post->id)->first();
         $this->assertNotNull($classification);
 
-        // Kimi should have error result
-        $this->assertEquals('skip', $classification->kimi_verdict);
-        $this->assertFalse($classification->kimi_completed);
+        // Haiku should have error result
+        $this->assertEquals('skip', $classification->haiku_verdict);
+        $this->assertFalse($classification->haiku_completed);
 
         // GPT should have successful result
         $this->assertEquals('keep', $classification->gpt_verdict);
@@ -299,11 +299,11 @@ class ClassifyPostJobTest extends TestCase
     public function test_handles_both_models_failing(): void
     {
         // Both providers throw permanent errors (no retry)
-        $this->mockKimiProvider->shouldReceive('classify')
+        $this->mockHaikuProvider->shouldReceive('classify')
             ->once()
             ->andThrow(new \App\Exceptions\PermanentClassificationException(
                 'Invalid API key',
-                'synthetic'
+                'anthropic-haiku'
             ));
 
         $this->mockGptProvider->shouldReceive('classify')
@@ -313,7 +313,7 @@ class ClassifyPostJobTest extends TestCase
                 'openai'
             ));
 
-        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+        $this->mockFactory([$this->mockHaikuProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
         $job->handle(app(LLMProviderFactory::class));
@@ -322,7 +322,7 @@ class ClassifyPostJobTest extends TestCase
         $this->assertNotNull($classification);
 
         // Both should have error results
-        $this->assertFalse($classification->kimi_completed);
+        $this->assertFalse($classification->haiku_completed);
         $this->assertFalse($classification->gpt_completed);
 
         // Should result in discard when both fail
@@ -337,13 +337,13 @@ class ClassifyPostJobTest extends TestCase
     public function test_borderline_classification(): void
     {
         // Results that produce a borderline score (between 0.4 and 0.6)
-        $this->mockKimiProvider->shouldReceive('classify')
+        $this->mockHaikuProvider->shouldReceive('classify')
             ->once()
             ->andReturn(new ClassificationResponse(
                 verdict: 'keep',
                 confidence: 0.5,
                 category: Classification::CATEGORY_ADVICE_THREAD,
-                reasoning: 'Weak keep from Kimi',
+                reasoning: 'Weak keep from Haiku',
                 rawResponse: [],
             ));
 
@@ -357,7 +357,7 @@ class ClassifyPostJobTest extends TestCase
                 rawResponse: [],
             ));
 
-        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+        $this->mockFactory([$this->mockHaikuProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
         $job->handle(app(LLMProviderFactory::class));
@@ -373,13 +373,13 @@ class ClassifyPostJobTest extends TestCase
     public function test_borderline_classification_mid_range(): void
     {
         // Results that produce a true borderline score (0.4 <= score < 0.6)
-        $this->mockKimiProvider->shouldReceive('classify')
+        $this->mockHaikuProvider->shouldReceive('classify')
             ->once()
             ->andReturn(new ClassificationResponse(
                 verdict: 'keep',
                 confidence: 0.9,
                 category: Classification::CATEGORY_GENUINE_PROBLEM,
-                reasoning: 'Strong keep from Kimi',
+                reasoning: 'Strong keep from Haiku',
                 rawResponse: [],
             ));
 
@@ -393,7 +393,7 @@ class ClassifyPostJobTest extends TestCase
                 rawResponse: [],
             ));
 
-        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+        $this->mockFactory([$this->mockHaikuProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
         $job->handle(app(LLMProviderFactory::class));
@@ -408,7 +408,7 @@ class ClassifyPostJobTest extends TestCase
 
     public function test_updates_scan_progress(): void
     {
-        $this->mockKimiProvider->shouldReceive('classify')
+        $this->mockHaikuProvider->shouldReceive('classify')
             ->once()
             ->andReturn(new ClassificationResponse(
                 verdict: 'keep',
@@ -428,7 +428,7 @@ class ClassifyPostJobTest extends TestCase
                 rawResponse: [],
             ));
 
-        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+        $this->mockFactory([$this->mockHaikuProvider, $this->mockGptProvider]);
 
         // Initial state
         $this->assertEquals(0, $this->scan->posts_classified);
@@ -451,10 +451,10 @@ class ClassifyPostJobTest extends TestCase
         ]);
 
         // Providers should not be called
-        $this->mockKimiProvider->shouldNotReceive('classify');
+        $this->mockHaikuProvider->shouldNotReceive('classify');
         $this->mockGptProvider->shouldNotReceive('classify');
 
-        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+        $this->mockFactory([$this->mockHaikuProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
         $job->handle(app(LLMProviderFactory::class));
@@ -472,10 +472,10 @@ class ClassifyPostJobTest extends TestCase
         $this->scan->update(['status' => Scan::STATUS_FAILED]);
 
         // Providers should not be called
-        $this->mockKimiProvider->shouldNotReceive('classify');
+        $this->mockHaikuProvider->shouldNotReceive('classify');
         $this->mockGptProvider->shouldNotReceive('classify');
 
-        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+        $this->mockFactory([$this->mockHaikuProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
         $job->handle(app(LLMProviderFactory::class));
@@ -491,10 +491,10 @@ class ClassifyPostJobTest extends TestCase
         $this->scan->update(['status' => Scan::STATUS_COMPLETED]);
 
         // Providers should not be called
-        $this->mockKimiProvider->shouldNotReceive('classify');
+        $this->mockHaikuProvider->shouldNotReceive('classify');
         $this->mockGptProvider->shouldNotReceive('classify');
 
-        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+        $this->mockFactory([$this->mockHaikuProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
         $job->handle(app(LLMProviderFactory::class));
@@ -515,7 +515,7 @@ class ClassifyPostJobTest extends TestCase
         $this->assertDatabaseHas('classifications', [
             'post_id' => $this->post->id,
             'final_decision' => Classification::DECISION_DISCARD,
-            'kimi_verdict' => 'skip',
+            'haiku_verdict' => 'skip',
             'gpt_verdict' => 'skip',
         ]);
 
@@ -526,12 +526,12 @@ class ClassifyPostJobTest extends TestCase
 
     public function test_permanent_error_uses_fallback_immediately(): void
     {
-        // Kimi throws permanent error (no retry even on first attempt)
-        $this->mockKimiProvider->shouldReceive('classify')
+        // Haiku throws permanent error (no retry even on first attempt)
+        $this->mockHaikuProvider->shouldReceive('classify')
             ->once()
             ->andThrow(new \App\Exceptions\PermanentClassificationException(
                 'Invalid API key',
-                'synthetic'
+                'anthropic-haiku'
             ));
 
         // GPT succeeds
@@ -545,7 +545,7 @@ class ClassifyPostJobTest extends TestCase
                 rawResponse: [],
             ));
 
-        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+        $this->mockFactory([$this->mockHaikuProvider, $this->mockGptProvider]);
 
         // First attempt - but permanent error should use fallback immediately
         $job = Mockery::mock(ClassifyPostJob::class, [$this->scan, $this->post])
@@ -572,12 +572,12 @@ class ClassifyPostJobTest extends TestCase
 
     public function test_single_model_keep_below_confidence_threshold(): void
     {
-        // Kimi throws permanent error (no retry)
-        $this->mockKimiProvider->shouldReceive('classify')
+        // Haiku throws permanent error (no retry)
+        $this->mockHaikuProvider->shouldReceive('classify')
             ->once()
             ->andThrow(new \App\Exceptions\PermanentClassificationException(
                 'Invalid API key',
-                'synthetic'
+                'anthropic-haiku'
             ));
 
         // GPT succeeds with confidence < 0.7
@@ -591,7 +591,7 @@ class ClassifyPostJobTest extends TestCase
                 rawResponse: [],
             ));
 
-        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+        $this->mockFactory([$this->mockHaikuProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
         $job->handle(app(LLMProviderFactory::class));
@@ -606,12 +606,12 @@ class ClassifyPostJobTest extends TestCase
 
     public function test_single_model_keep_at_confidence_threshold(): void
     {
-        // Kimi throws permanent error
-        $this->mockKimiProvider->shouldReceive('classify')
+        // Haiku throws permanent error
+        $this->mockHaikuProvider->shouldReceive('classify')
             ->once()
             ->andThrow(new \App\Exceptions\PermanentClassificationException(
                 'Invalid API key',
-                'synthetic'
+                'anthropic-haiku'
             ));
 
         // GPT succeeds with confidence exactly 0.7
@@ -625,7 +625,7 @@ class ClassifyPostJobTest extends TestCase
                 rawResponse: [],
             ));
 
-        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+        $this->mockFactory([$this->mockHaikuProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
         $job->handle(app(LLMProviderFactory::class));
@@ -640,12 +640,12 @@ class ClassifyPostJobTest extends TestCase
 
     public function test_single_model_skip_verdict(): void
     {
-        // Kimi throws permanent error
-        $this->mockKimiProvider->shouldReceive('classify')
+        // Haiku throws permanent error
+        $this->mockHaikuProvider->shouldReceive('classify')
             ->once()
             ->andThrow(new \App\Exceptions\PermanentClassificationException(
                 'Invalid API key',
-                'synthetic'
+                'anthropic-haiku'
             ));
 
         // GPT succeeds with skip verdict
@@ -659,7 +659,7 @@ class ClassifyPostJobTest extends TestCase
                 rawResponse: [],
             ));
 
-        $this->mockFactory([$this->mockKimiProvider, $this->mockGptProvider]);
+        $this->mockFactory([$this->mockHaikuProvider, $this->mockGptProvider]);
 
         $job = new ClassifyPostJob($this->scan, $this->post);
         $job->handle(app(LLMProviderFactory::class));

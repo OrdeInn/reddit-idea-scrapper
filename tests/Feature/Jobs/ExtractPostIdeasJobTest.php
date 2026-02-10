@@ -9,7 +9,7 @@ use App\Models\Idea;
 use App\Models\Post;
 use App\Models\Scan;
 use App\Models\Subreddit;
-use App\Services\LLM\ClaudeSonnetProvider;
+use App\Services\LLM\AnthropicSonnetProvider;
 use App\Services\LLM\DTOs\ExtractionResponse;
 use App\Services\LLM\DTOs\IdeaDTO;
 use App\Services\LLM\LLMProviderFactory;
@@ -105,7 +105,7 @@ class ExtractPostIdeasJobTest extends TestCase
             'final_decision' => 'borderline',
         ]);
 
-        $mockProvider = Mockery::mock(ClaudeSonnetProvider::class);
+        $mockProvider = Mockery::mock(AnthropicSonnetProvider::class);
         $mockProvider->shouldReceive('extract')
             ->once()
             ->andReturn(new ExtractionResponse(
@@ -144,7 +144,7 @@ class ExtractPostIdeasJobTest extends TestCase
             $this->createMockIdeaDTO('Idea4'),
         ]);
 
-        $mockProvider = Mockery::mock(ClaudeSonnetProvider::class);
+        $mockProvider = Mockery::mock(AnthropicSonnetProvider::class);
         $mockProvider->shouldReceive('extract')
             ->once()
             ->andReturn(new ExtractionResponse(
@@ -175,7 +175,7 @@ class ExtractPostIdeasJobTest extends TestCase
         $this->post->markAsExtracted();
 
         // Provider should not be called
-        $mockProvider = Mockery::mock(ClaudeSonnetProvider::class);
+        $mockProvider = Mockery::mock(AnthropicSonnetProvider::class);
         $mockProvider->shouldNotReceive('extract');
 
         $this->mockFactory($mockProvider);
@@ -201,7 +201,7 @@ class ExtractPostIdeasJobTest extends TestCase
         ]);
 
         // Provider should not be called
-        $mockProvider = Mockery::mock(ClaudeSonnetProvider::class);
+        $mockProvider = Mockery::mock(AnthropicSonnetProvider::class);
         $mockProvider->shouldNotReceive('extract');
 
         $this->mockFactory($mockProvider);
@@ -223,7 +223,7 @@ class ExtractPostIdeasJobTest extends TestCase
         ]);
 
         // Provider should not be called
-        $mockProvider = Mockery::mock(ClaudeSonnetProvider::class);
+        $mockProvider = Mockery::mock(AnthropicSonnetProvider::class);
         $mockProvider->shouldNotReceive('extract');
 
         $this->mockFactory($mockProvider);
@@ -245,7 +245,7 @@ class ExtractPostIdeasJobTest extends TestCase
         ]);
 
         // Provider should not be called
-        $mockProvider = Mockery::mock(ClaudeSonnetProvider::class);
+        $mockProvider = Mockery::mock(AnthropicSonnetProvider::class);
         $mockProvider->shouldNotReceive('extract');
 
         $this->mockFactory($mockProvider);
@@ -270,7 +270,7 @@ class ExtractPostIdeasJobTest extends TestCase
             $this->createMockIdeaDTO('Idea3'),
         ]);
 
-        $mockProvider = Mockery::mock(ClaudeSonnetProvider::class);
+        $mockProvider = Mockery::mock(AnthropicSonnetProvider::class);
         $mockProvider->shouldReceive('extract')
             ->once()
             ->andReturn(new ExtractionResponse(
@@ -317,7 +317,7 @@ class ExtractPostIdeasJobTest extends TestCase
             'final_decision' => 'keep',
         ]);
 
-        $mockProvider = Mockery::mock(ClaudeSonnetProvider::class);
+        $mockProvider = Mockery::mock(AnthropicSonnetProvider::class);
         $mockProvider->shouldReceive('extract')
             ->once()
             ->andReturn(new ExtractionResponse(
@@ -388,7 +388,7 @@ class ExtractPostIdeasJobTest extends TestCase
      */
     private function mockProvider(IdeaDTO $ideaDTO): void
     {
-        $mockProvider = Mockery::mock(ClaudeSonnetProvider::class);
+        $mockProvider = Mockery::mock(AnthropicSonnetProvider::class);
         $mockProvider->shouldReceive('extract')
             ->once()
             ->andReturn(new ExtractionResponse(
