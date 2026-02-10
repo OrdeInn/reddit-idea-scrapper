@@ -12,7 +12,7 @@ class LLMLogger
     /**
      * Log an outgoing LLM request.
      *
-     * @param string $provider Provider name (e.g., 'openai', 'anthropic', 'synthetic')
+     * @param string $provider Provider name (e.g., 'openai', 'anthropic-haiku', 'anthropic-sonnet')
      * @param string $model Model identifier (e.g., 'gpt-5-mini-2025-08-07')
      * @param string $operation Operation type ('classification' or 'extraction')
      * @param array $requestPayload The request payload (will be sanitized before logging)

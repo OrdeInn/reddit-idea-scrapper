@@ -29,7 +29,7 @@ class LLMProviderFactory
     /**
      * Create an LLM provider instance by name.
      *
-     * @param string $providerName Provider key from config (e.g., 'claude-haiku')
+     * @param string $providerName Provider key from config (e.g., 'anthropic-haiku')
      * @return LLMProviderInterface
      * @throws InvalidArgumentException If provider is not configured
      */

@@ -259,7 +259,7 @@ class ClassifyPostJob implements ShouldQueue
 
             // Map provider name to column prefix
             $prefix = match ($providerName) {
-                'synthetic' => 'kimi',
+                'anthropic-haiku' => 'haiku',
                 'openai' => 'gpt',
                 default => throw new RuntimeException("Unknown provider: {$providerName}"),
             };
@@ -297,22 +297,22 @@ class ClassifyPostJob implements ShouldQueue
      */
     private function processClassificationResults(Classification $classification, array $results): void
     {
-        $kimiCompleted = $results['synthetic']['completed'] ?? false;
+        $haikuCompleted = $results['anthropic-haiku']['completed'] ?? false;
         $gptCompleted = $results['openai']['completed'] ?? false;
 
         // Case 1: Both models succeeded - use model's consensus logic
-        if ($kimiCompleted && $gptCompleted) {
+        if ($haikuCompleted && $gptCompleted) {
             $classification->processResults();
             return;
         }
 
         // Case 2: Retry logic for partial failures with transient errors
-        if (! $kimiCompleted || ! $gptCompleted) {
-            $kimiError = $results['synthetic']['error'] ?? null;
+        if (! $haikuCompleted || ! $gptCompleted) {
+            $haikuError = $results['anthropic-haiku']['error'] ?? null;
             $gptError = $results['openai']['error'] ?? null;
 
             // Check if any error is transient
-            $hasTransientError = $kimiError === 'transient' || $gptError === 'transient';
+            $hasTransientError = $haikuError === 'transient' || $gptError === 'transient';
 
             // Check if we're on a non-final attempt
             $currentAttempt = $this->attempts();
@@ -325,8 +325,8 @@ class ClassifyPostJob implements ShouldQueue
                     'scan_id' => $this->scan->id,
                     'attempt' => $currentAttempt,
                     'max_attempts' => $this->tries,
-                    'kimi_completed' => $kimiCompleted,
-                    'kimi_error' => $kimiError,
+                    'haiku_completed' => $haikuCompleted,
+                    'haiku_error' => $haikuError,
                     'gpt_completed' => $gptCompleted,
                     'gpt_error' => $gptError,
                 ]);
@@ -346,21 +346,21 @@ class ClassifyPostJob implements ShouldQueue
                     'post_id' => $classification->post_id,
                     'scan_id' => $this->scan->id,
                     'attempt' => $currentAttempt,
-                    'kimi_completed' => $kimiCompleted,
+                    'haiku_completed' => $haikuCompleted,
                     'gpt_completed' => $gptCompleted,
                 ]);
             } else {
                 Log::info('Partial classification failure with permanent error, using fallback', [
                     'post_id' => $classification->post_id,
                     'scan_id' => $this->scan->id,
-                    'kimi_completed' => $kimiCompleted,
+                    'haiku_completed' => $haikuCompleted,
                     'gpt_completed' => $gptCompleted,
                 ]);
             }
         }
 
         // Case 2: Both models failed - mark as discard
-        if (! $kimiCompleted && ! $gptCompleted) {
+        if (! $haikuCompleted && ! $gptCompleted) {
             $classification->final_decision = Classification::DECISION_DISCARD;
             $classification->combined_score = 0.0;
             $classification->classified_at = now();
@@ -380,9 +380,9 @@ class ClassifyPostJob implements ShouldQueue
         // - Skip verdict → DECISION_DISCARD
         $confidenceThreshold = 0.7;
 
-        if ($kimiCompleted && ! $gptCompleted) {
-            $verdict = $results['synthetic']['response']->verdict;
-            $confidence = $results['synthetic']['response']->confidence;
+        if ($haikuCompleted && ! $gptCompleted) {
+            $verdict = $results['anthropic-haiku']['response']->verdict;
+            $confidence = $results['anthropic-haiku']['response']->confidence;
 
             if ($verdict === 'keep') {
                 $classification->final_decision = $confidence >= $confidenceThreshold
@@ -393,7 +393,7 @@ class ClassifyPostJob implements ShouldQueue
                 $classification->final_decision = Classification::DECISION_DISCARD;
                 $classification->combined_score = 0.0;
             }
-        } elseif ($gptCompleted && ! $kimiCompleted) {
+        } elseif ($gptCompleted && ! $haikuCompleted) {
             $verdict = $results['openai']['response']->verdict;
             $confidence = $results['openai']['response']->confidence;
 
@@ -414,7 +414,7 @@ class ClassifyPostJob implements ShouldQueue
         Log::debug('Single classification provider succeeded, applied fallback logic', [
             'classification_id' => $classification->id,
             'post_id' => $classification->post_id,
-            'kimi_completed' => $kimiCompleted,
+            'haiku_completed' => $haikuCompleted,
             'gpt_completed' => $gptCompleted,
             'final_decision' => $classification->final_decision,
         ]);
@@ -443,11 +443,11 @@ class ClassifyPostJob implements ShouldQueue
                 $classification = Classification::updateOrCreate(
                     ['post_id' => $post->id],
                     [
-                        'kimi_verdict' => 'skip',
-                        'kimi_confidence' => 0.0,
-                        'kimi_category' => 'job-failed',
-                        'kimi_reasoning' => 'Classification job failed permanently',
-                        'kimi_completed' => false,
+                        'haiku_verdict' => 'skip',
+                        'haiku_confidence' => 0.0,
+                        'haiku_category' => 'job-failed',
+                        'haiku_reasoning' => 'Classification job failed permanently',
+                        'haiku_completed' => false,
                         'gpt_verdict' => 'skip',
                         'gpt_confidence' => 0.0,
                         'gpt_category' => 'job-failed',

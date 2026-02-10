@@ -13,7 +13,7 @@ return [
 
     'classification' => [
         // Which providers to use for classification (all run in parallel)
-        'providers' => ['anthropic-haiku', 'openai-gpt4-mini'],
+        'providers' => ['anthropic-haiku', 'openai-gpt'],
 
         // Consensus score thresholds
         // score = average(confidence × keep_flag) across configured providers
@@ -35,7 +35,7 @@ return [
 
     'extraction' => [
         // Which provider to use for extraction
-        'provider' => 'claude-sonnet',
+        'provider' => 'anthropic-sonnet',
 
         // Maximum ideas to extract per post
         'max_ideas_per_post' => 5,
@@ -52,23 +52,23 @@ return [
     */
 
     'providers' => [
-        'anthropic-haiku' => [
-            'class' => App\Services\LLM\AnthropicHaikuProvider::class,
-            'api_key' => env('ANTHROPIC_API_KEY', ''),
-            'model' => 'claude-haiku-4-5',
-            'max_tokens' => 1024,
-            'temperature' => 0.3,
-        ],
-
-        'claude-sonnet' => [
+        'anthropic-sonnet' => [
             'class' => App\Services\LLM\AnthropicSonnetProvider::class,
             'api_key' => env('ANTHROPIC_API_KEY', ''),
-            'model' => 'claude-sonnet-4-5',
+            'model' => 'claude-sonnet-4-5-20250929',
             'max_tokens' => 4096,
             'temperature' => 0.5,
         ],
 
-        'openai-gpt4-mini' => [
+        'anthropic-haiku' => [
+            'class' => App\Services\LLM\AnthropicHaikuProvider::class,
+            'api_key' => env('ANTHROPIC_API_KEY', ''),
+            'model' => 'claude-haiku-4-5-20251001',
+            'max_tokens' => 1024,
+            'temperature' => 0.3,
+        ],
+
+        'openai-gpt' => [
             'class' => App\Services\LLM\OpenAIProvider::class,
             'api_key' => env('OPENAI_API_KEY', ''),
             'model' => 'gpt-5-mini-2025-08-07',

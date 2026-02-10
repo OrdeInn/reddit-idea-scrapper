@@ -227,7 +227,7 @@ class ScanClassifyCommand extends Command
     private function getProviders(LLMProviderFactory $factory, string $provider): array
     {
         return match ($provider) {
-            'gpt' => [LLMProviderFactory::make('openai-gpt4-mini')],
+            'gpt' => [LLMProviderFactory::make('openai-gpt')],
             'both' => $factory->classificationProviders(),
         };
     }
@@ -287,7 +287,7 @@ class ScanClassifyCommand extends Command
 
             // Map provider name to column prefix
             $prefix = match ($providerName) {
-                'synthetic' => 'kimi',
+                'anthropic-haiku' => 'haiku',
                 'openai' => 'gpt',
                 default => throw new \RuntimeException("Unknown LLM provider: {$providerName}"),
             };
@@ -309,19 +309,19 @@ class ScanClassifyCommand extends Command
      */
     private function processAndFinalizeClassification(Classification $classification, array $results): void
     {
-        $kimiCompleted = $results['synthetic']['completed'] ?? false;
+        $haikuCompleted = $results['anthropic-haiku']['completed'] ?? false;
         $gptCompleted = $results['openai']['completed'] ?? false;
         $numProvidersRequested = count($results);
 
         // Case 1: Both providers completed - use consensus logic
-        if ($kimiCompleted && $gptCompleted) {
+        if ($haikuCompleted && $gptCompleted) {
             $classification->processResults();
 
             return;
         }
 
         // Case 2: Both failed
-        if (! $kimiCompleted && ! $gptCompleted) {
+        if (! $haikuCompleted && ! $gptCompleted) {
             $classification->final_decision = Classification::DECISION_DISCARD;
             $classification->combined_score = 0.0;
             $classification->classified_at = now();
@@ -333,9 +333,9 @@ class ScanClassifyCommand extends Command
         // Case 3: Single provider succeeded - use direct verdict
         $confidenceThreshold = 0.7;
 
-        if ($kimiCompleted && ! $gptCompleted) {
-            $verdict = $results['synthetic']['response']->verdict;
-            $confidence = $results['synthetic']['response']->confidence;
+        if ($haikuCompleted && ! $gptCompleted) {
+            $verdict = $results['anthropic-haiku']['response']->verdict;
+            $confidence = $results['anthropic-haiku']['response']->confidence;
 
             // Single provider mode: direct verdict, not reduced confidence
             if ($numProvidersRequested === 1) {
@@ -355,7 +355,7 @@ class ScanClassifyCommand extends Command
                     $classification->combined_score = 0.0;
                 }
             }
-        } elseif ($gptCompleted && ! $kimiCompleted) {
+        } elseif ($gptCompleted && ! $haikuCompleted) {
             $verdict = $results['openai']['response']->verdict;
             $confidence = $results['openai']['response']->confidence;
 
@@ -390,7 +390,7 @@ class ScanClassifyCommand extends Command
      */
     private function createSimulatedClassification(Post $post, array $results): Classification
     {
-        $kimiCompleted = $results['synthetic']['completed'] ?? false;
+        $haikuCompleted = $results['anthropic-haiku']['completed'] ?? false;
         $gptCompleted = $results['openai']['completed'] ?? false;
         $numProvidersRequested = count($results);
 
@@ -405,7 +405,7 @@ class ScanClassifyCommand extends Command
             $completed = $result['completed'];
 
             $prefix = match ($providerName) {
-                'synthetic' => 'kimi',
+                'anthropic-haiku' => 'haiku',
                 'openai' => 'gpt',
                 default => throw new \RuntimeException("Unknown LLM provider: {$providerName}"),
             };
@@ -422,11 +422,11 @@ class ScanClassifyCommand extends Command
         // Calculate final decision - use same logic as processAndFinalizeClassification but without DB calls
         $confidenceThreshold = 0.7;
 
-        if ($kimiCompleted && $gptCompleted) {
+        if ($haikuCompleted && $gptCompleted) {
             // Both providers succeeded - use consensus logic (mimic what processResults() does without saving)
             $shortcutDecision = Classification::checkShortcutRule(
-                $classification->kimi_verdict,
-                $classification->kimi_confidence,
+                $classification->haiku_verdict,
+                $classification->haiku_confidence,
                 $classification->gpt_verdict,
                 $classification->gpt_confidence
             );
@@ -436,21 +436,21 @@ class ScanClassifyCommand extends Command
                 $classification->final_decision = $shortcutDecision;
             } else {
                 $classification->combined_score = Classification::calculateConsensusScore(
-                    $classification->kimi_verdict,
-                    $classification->kimi_confidence,
+                    $classification->haiku_verdict,
+                    $classification->haiku_confidence,
                     $classification->gpt_verdict,
                     $classification->gpt_confidence
                 );
                 $classification->final_decision = Classification::determineFinalDecision($classification->combined_score);
             }
-        } elseif (! $kimiCompleted && ! $gptCompleted) {
+        } elseif (! $haikuCompleted && ! $gptCompleted) {
             // Both failed
             $classification->final_decision = Classification::DECISION_DISCARD;
             $classification->combined_score = 0.0;
-        } elseif ($kimiCompleted && ! $gptCompleted) {
-            // Only Kimi succeeded
-            $verdict = $results['synthetic']['response']->verdict;
-            $confidence = $results['synthetic']['response']->confidence;
+        } elseif ($haikuCompleted && ! $gptCompleted) {
+            // Only Haiku succeeded
+            $verdict = $results['anthropic-haiku']['response']->verdict;
+            $confidence = $results['anthropic-haiku']['response']->confidence;
 
             if ($numProvidersRequested === 1) {
                 $classification->final_decision = Classification::determineFinalDecision(
@@ -469,7 +469,7 @@ class ScanClassifyCommand extends Command
                     $classification->combined_score = 0.0;
                 }
             }
-        } elseif ($gptCompleted && ! $kimiCompleted) {
+        } elseif ($gptCompleted && ! $haikuCompleted) {
             // Only GPT succeeded
             $verdict = $results['openai']['response']->verdict;
             $confidence = $results['openai']['response']->confidence;
@@ -533,8 +533,8 @@ class ScanClassifyCommand extends Command
         foreach ($results as $providerName => $result) {
             // Map provider names to user-friendly display names
             $displayName = match ($providerName) {
-                'synthetic' => 'Kimi',
-                'openai' => 'GPT-4',
+                'anthropic-haiku' => 'Haiku',
+                'openai' => 'GPT',
                 default => $providerName,
             };
 
