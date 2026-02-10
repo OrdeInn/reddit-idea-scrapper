@@ -307,7 +307,10 @@ class ClassifyPostJob implements ShouldQueue
         }
 
         // Case 2: Retry logic for partial failures with transient errors
-        if (! $haikuCompleted || ! $gptCompleted) {
+        // Only apply retry logic if BOTH providers were requested and at least one failed
+        $bothProvidersRequested = array_key_exists('anthropic-haiku', $results) && array_key_exists('openai', $results);
+
+        if ($bothProvidersRequested && (! $haikuCompleted || ! $gptCompleted)) {
             $haikuError = $results['anthropic-haiku']['error'] ?? null;
             $gptError = $results['openai']['error'] ?? null;
 
@@ -357,6 +360,14 @@ class ClassifyPostJob implements ShouldQueue
                     'gpt_completed' => $gptCompleted,
                 ]);
             }
+        } else if (! $bothProvidersRequested && (! $haikuCompleted || ! $gptCompleted)) {
+            // Single-provider case: one provider requested, skip the "partial failure" path
+            // We'll handle this below in the single-provider fallback logic
+            Log::debug('Single provider mode, using fallback logic', [
+                'post_id' => $classification->post_id,
+                'haiku_completed' => $haikuCompleted,
+                'gpt_completed' => $gptCompleted,
+            ]);
         }
 
         // Case 2: Both models failed - mark as discard
