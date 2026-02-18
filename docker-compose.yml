@@ -1,0 +1,94 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reddit_scrapper_app
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+      - vendor_data:/var/www/html/vendor
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - reddit_scrapper
+
+  nginx:
+    image: nginx:alpine
+    container_name: reddit_scrapper_nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+    networks:
+      - reddit_scrapper
+
+  db:
+    image: mysql:8.0
+    container_name: reddit_scrapper_db
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: reddit_scrapper
+      MYSQL_USER: sail
+      MYSQL_PASSWORD: password
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - reddit_scrapper
+
+  node:
+    image: node:20-alpine
+    container_name: reddit_scrapper_node
+    working_dir: /var/www/html
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/var/www/html
+      - node_modules_data:/var/www/html/node_modules
+    environment:
+      - VITE_HOST=0.0.0.0
+    command: npm run dev
+    depends_on:
+      - app
+    networks:
+      - reddit_scrapper
+
+  queue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reddit_scrapper_queue
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+      - vendor_data:/var/www/html/vendor
+    command: php artisan queue:listen --queue=fetch,classify,extract,default --tries=3 --timeout=300 --backoff=10
+    depends_on:
+      app:
+        condition: service_started
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - reddit_scrapper
+
+volumes:
+  db_data:
+  vendor_data:
+  node_modules_data:
+
+networks:
+  reddit_scrapper:
+    driver: bridge
