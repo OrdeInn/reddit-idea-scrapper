@@ -1,4 +1,4 @@
-.PHONY: up down build shell migrate seed fresh test logs queue key install horizon horizon-status horizon-pause horizon-continue horizon-terminate
+.PHONY: up down build shell migrate seed fresh test test-frontend test-e2e logs queue key install horizon horizon-status horizon-pause horizon-continue horizon-terminate
 
 up:
 	docker compose up -d
@@ -23,6 +23,12 @@ fresh:
 
 test:
 	docker compose exec app php artisan test
+
+test-frontend:
+	docker compose exec node npm run test
+
+test-e2e:
+	npx playwright test
 
 logs:
 	docker compose logs -f

@@ -87,7 +87,9 @@ This will build Docker images, install Composer and NPM dependencies, run databa
 | `make down` | Stop all services |
 | `make shell` | Open a bash shell in the app container |
 | `make migrate` | Run database migrations |
-| `make test` | Run PHPUnit test suite |
+| `make test` | Run backend PHPUnit test suite |
+| `make test-frontend` | Run frontend unit tests (Vitest) |
+| `make test-e2e` | Run end-to-end tests (Playwright) |
 | `make queue` | Tail queue worker logs |
 | `make horizon` | Print Horizon dashboard URL |
 
