@@ -250,7 +250,7 @@ const scoreEntries = [
                                         type="button"
                                         @click="copyToClipboard(name)"
                                         class="px-2.5 py-1 text-sm font-medium bg-brand-50 text-brand-700 border border-brand-200 rounded-full hover:bg-brand-100 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-                                        :title="`Copy "${name}" to clipboard`"
+                                        :title="`Copy '${name}' to clipboard`"
                                         :aria-label="`Copy ${name} to clipboard`"
                                     >
                                         {{ name }}

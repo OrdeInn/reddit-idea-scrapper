@@ -1,59 +1,155 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Reddit Idea Scrapper
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A SaaS opportunity discovery tool that scans Reddit subreddits to surface validated business ideas. It fetches posts and comments, runs them through a dual-LLM classification pipeline, and extracts structured SaaS opportunities with market analysis, viability scores, and branding suggestions.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## What It Does
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+1. **Scans subreddits** — fetches posts and comments from a configurable date range via the Reddit API
+2. **Classifies content** — a dual-gate consensus filter (Anthropic Haiku + OpenAI GPT-4o-mini) scores each post on how likely it contains a real problem or opportunity
+3. **Extracts ideas** — passing posts are processed by Anthropic Sonnet to extract structured SaaS ideas including problem statement, solution, target audience, monetization paths, branding suggestions, competitor analysis, and a 5-dimensional score
+4. **Presents results** — a clean web UI lets you filter, sort, star, and deep-dive into any extracted idea
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Designed for solo developers and small teams looking for buildable, validated SaaS ideas without manually reading thousands of Reddit posts.
 
-## Learning Laravel
+---
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+## Tech Stack
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+| Layer | Technology |
+|---|---|
+| Backend framework | Laravel 12 (PHP 8.2+) |
+| Frontend | Vue 3 + Inertia.js + Tailwind CSS 4 |
+| Build tool | Vite |
+| Queue system | Laravel Horizon + Redis |
+| Database | MySQL 8.0 |
+| LLM — classification | Anthropic Haiku + OpenAI GPT-4o-mini |
+| LLM — extraction | Anthropic Sonnet |
+| External data | Reddit API (OAuth) |
+| Containerization | Docker + Docker Compose |
 
-## Laravel Sponsors
+---
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+## Quick Start
 
-### Premium Partners
+### Prerequisites
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+- Docker and Docker Compose
+- A Reddit app (script type) — [create one here](https://www.reddit.com/prefs/apps)
+- An [Anthropic API key](https://console.anthropic.com/)
+- An [OpenAI API key](https://platform.openai.com/api-keys)
 
-## Contributing
+### 1. Clone and configure
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+git clone <repository-url>
+cd reddit-idea-scrapper
+cp .env.example .env
+```
 
-## Code of Conduct
+Open `.env` and fill in the required credentials:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```env
+# Reddit API
+REDDIT_CLIENT_ID=your_client_id
+REDDIT_CLIENT_SECRET=your_client_secret
+REDDIT_USERNAME=your_reddit_username
+REDDIT_PASSWORD=your_reddit_password
+REDDIT_USER_AGENT="SaaSScanner/1.0 by YourRedditUsername"
 
-## Security Vulnerabilities
+# LLM
+ANTHROPIC_API_KEY=your_anthropic_key
+OPENAI_API_KEY=your_openai_key
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### 2. Install and start
+
+```bash
+make install
+```
+
+This will build Docker images, install Composer and NPM dependencies, run database migrations, and start all services.
+
+### 3. Open the app
+
+- App: [http://localhost:8080](http://localhost:8080)
+- Horizon (queue dashboard): [http://localhost:8080/horizon](http://localhost:8080/horizon)
+
+---
+
+## Make Commands
+
+| Command | Description |
+|---|---|
+| `make install` | First-time setup (build, migrate, start) |
+| `make up` | Start all services |
+| `make down` | Stop all services |
+| `make shell` | Open a bash shell in the app container |
+| `make migrate` | Run database migrations |
+| `make test` | Run PHPUnit test suite |
+| `make queue` | Tail queue worker logs |
+| `make horizon` | Open Horizon dashboard link |
+
+---
+
+## Architecture Overview
+
+```
+User (Vue 3 UI)
+      │
+      ▼
+Laravel Controllers
+      │
+      ├── MySQL (Scans, Posts, Ideas, Classifications)
+      │
+      └── Redis Queue (Laravel Horizon)
+               │
+               ├── fetch     → Reddit API → raw posts & comments
+               ├── classify  → Haiku + GPT-4o-mini dual-gate filter
+               └── extract   → Sonnet → structured SaaS idea objects
+```
+
+### Processing Pipeline
+
+1. **Fetch** — Reddit API is polled with OAuth. Posts and comments are stored raw. Pagination is cursor-based so scans are resumable.
+2. **Classify** — Posts are chunked and sent to both Haiku and GPT-4o-mini. A consensus score determines keep / borderline / discard. Only keep and borderline posts advance.
+3. **Extract** — Sonnet processes each qualifying post in chunks and returns structured idea objects with full market analysis and scores.
+4. **Finalize** — Scan status is updated and subreddit statistics are refreshed.
+
+### Scan Behavior
+
+- **Initial scan:** fetches the last 3 months of posts
+- **Rescan:** fetches the last 2 weeks + refreshes comments on previously high-value posts
+
+---
+
+## Configuration
+
+LLM providers, models, chunk sizes, and timeouts are configured in `config/llm.php`. Key env variables:
+
+```env
+LLM_CLASSIFICATION_CHUNK_SIZE=10   # posts per classification job
+LLM_EXTRACTION_CHUNK_SIZE=5        # posts per extraction job
+```
+
+Queue driver defaults to Redis. To use the database driver instead, set `QUEUE_CONNECTION=database` in `.env`.
+
+---
+
+## Docker Services
+
+| Service | Purpose | Port |
+|---|---|---|
+| `app` | PHP 8.3-FPM (Laravel) | — |
+| `nginx` | Web server | 8080 |
+| `db` | MySQL 8.0 | 3306 |
+| `redis` | Cache + queue backend | 6379 |
+| `node` | Vite dev server (HMR) | 5173 |
+| `queue` | Laravel Horizon worker | — |
+
+---
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+MIT

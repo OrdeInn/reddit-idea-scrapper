@@ -43,13 +43,6 @@ class ExtractIdeasChunkJob implements ShouldQueue
     public int $timeout = 1500;
 
     /**
-     * Named queue assignment.
-     * Uses a dedicated 'extract-chunk' queue to avoid competing with orchestrators/finalizers
-     * (which run on the same 'extract' queue with a shorter Horizon timeout).
-     */
-    public string $queue = 'extract-chunk';
-
-    /**
      * Create a new job instance.
      *
      * @param int $scanId The scan ID (scalar, NOT Eloquent model — safer for batch serialization)
@@ -58,7 +51,9 @@ class ExtractIdeasChunkJob implements ShouldQueue
     public function __construct(
         public int $scanId,
         public array $postIds,
-    ) {}
+    ) {
+        $this->onQueue('extract-chunk');
+    }
 
     /**
      * Execute the job.

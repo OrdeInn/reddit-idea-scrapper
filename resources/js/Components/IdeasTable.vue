@@ -206,6 +206,8 @@ onBeforeUnmount(() => {
     abortController.value?.abort()
 })
 
+defineExpose({ refresh: () => fetchIdeas(1) })
+
 watch(
     () => props.mode,
     () => {

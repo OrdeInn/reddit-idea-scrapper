@@ -162,15 +162,13 @@ class FetchPostsJob implements ShouldQueue
                         'fetched_at' => now(),
                         'scan_id' => $scan->id, // Associate with current scan for rescan support
                     ]);
-
-                    continue;
+                } else {
+                    // Create new post
+                    Post::create($redditPost->toArray(
+                        subredditId: $scan->subreddit_id,
+                        scanId: $scan->id,
+                    ));
                 }
-
-                // Create new post
-                Post::create($redditPost->toArray(
-                    subredditId: $scan->subreddit_id,
-                    scanId: $scan->id,
-                ));
 
                 $storedCount++;
             }

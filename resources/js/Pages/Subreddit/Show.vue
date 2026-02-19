@@ -50,6 +50,7 @@ let pollAbortController = null
 
 const showConfigModal = ref(false)
 const modalErrorMessage = ref(null)
+const ideasTable = ref(null)
 
 const isScanning = computed(() => !!scanStatus.value?.has_active_scan)
 const activeScan = computed(() => scanStatus.value?.active_scan)
@@ -189,6 +190,9 @@ const pollStatus = async () => {
                 has_active_scan: false,
                 active_scan: data.scan?.is_failed ? data.scan : null,
                 last_scan: data.scan?.is_completed ? data.scan : scanStatus.value.last_scan,
+            }
+            if (data.scan?.is_completed) {
+                ideasTable.value?.refresh()
             }
             router.reload({ only: ['status', 'subreddit', 'scan_history'] })
         }
@@ -335,7 +339,7 @@ const confirmDelete = async () => {
         />
 
         <!-- Ideas table -->
-        <IdeasTable :subreddit-id="subreddit.id" />
+        <IdeasTable ref="ideasTable" :subreddit-id="subreddit.id" />
 
         <!-- Scan configuration modal -->
         <ScanConfigModal

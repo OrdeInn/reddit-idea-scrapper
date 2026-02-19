@@ -49,14 +49,13 @@ key:
 	docker compose exec app php artisan key:generate
 
 install:
-	cp -n .env.example .env
+	cp -n .env.example .env || true
 	docker compose build --no-cache
 	docker compose up -d
 	@echo "Waiting for database to be ready..."
 	@until docker compose exec db mysqladmin ping -h localhost -u root -ppassword >/dev/null 2>&1; do echo "Database is unavailable - sleeping"; sleep 2; done
 	@echo "Database is ready!"
 	docker compose exec app composer install
-	docker compose exec node npm install
 	docker compose exec app php artisan key:generate --force
 	docker compose exec app chmod -R 775 storage bootstrap/cache
 	docker compose exec app php artisan migrate

@@ -45,13 +45,6 @@ class ClassifyPostsChunkJob implements ShouldQueue
     public int $timeout = 2400;
 
     /**
-     * Named queue assignment.
-     * Uses a dedicated 'classify-chunk' queue to avoid competing with orchestrators/finalizers
-     * (which run on the same 'classify' queue with a shorter Horizon timeout).
-     */
-    public string $queue = 'classify-chunk';
-
-    /**
      * Create a new job instance.
      *
      * @param int $scanId The scan ID (scalar, NOT Eloquent model — safer for batch serialization)
@@ -60,7 +53,9 @@ class ClassifyPostsChunkJob implements ShouldQueue
     public function __construct(
         public int $scanId,
         public array $postIds,
-    ) {}
+    ) {
+        $this->onQueue('classify-chunk');
+    }
 
     /**
      * Execute the job.

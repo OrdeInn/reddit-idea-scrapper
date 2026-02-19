@@ -27,18 +27,15 @@ class FinalizeClassificationJob implements ShouldQueue
     public int $backoff = 30;
 
     /**
-     * Queue assignment.
-     */
-    public string $queue = 'classify';
-
-    /**
      * Create a new job instance.
      *
      * @param int $scanId The scan ID (scalar, NOT Eloquent model — dispatched from serialized batch callback)
      */
     public function __construct(
         public int $scanId,
-    ) {}
+    ) {
+        $this->onQueue('classify');
+    }
 
     /**
      * Execute the job.

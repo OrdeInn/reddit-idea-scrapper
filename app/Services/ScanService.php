@@ -193,6 +193,7 @@ class ScanService
     {
         return $subreddit->scans()
             ->where('status', Scan::STATUS_COMPLETED)
+            ->withCount('posts')
             ->orderByDesc('completed_at')
             ->limit(10)
             ->get()
@@ -201,7 +202,7 @@ class ScanService
                 'scan_type' => $scan->scan_type,
                 'date_from' => $scan->date_from?->toIso8601String(),
                 'date_to' => $scan->date_to?->toIso8601String(),
-                'posts_fetched' => $scan->posts_fetched,
+                'posts_fetched' => $scan->posts_fetched ?: $scan->posts_count,
                 'ideas_found' => $scan->ideas_found,
                 'completed_at' => $scan->completed_at?->toIso8601String(),
                 'completed_at_human' => $scan->completed_at?->diffForHumans(),
