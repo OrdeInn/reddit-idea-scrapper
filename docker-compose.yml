@@ -48,6 +48,22 @@ services:
     networks:
       - reddit_scrapper
 
+  redis:
+    image: redis:7-alpine
+    container_name: reddit_scrapper_redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - reddit_scrapper
+
   node:
     image: node:20-alpine
     container_name: reddit_scrapper_node
@@ -74,13 +90,23 @@ services:
     volumes:
       - .:/var/www/html
       - vendor_data:/var/www/html/vendor
-    command: php artisan queue:listen --queue=fetch,classify,extract,default --tries=3 --timeout=300 --backoff=10
+    command: php artisan horizon
     depends_on:
       app:
         condition: service_started
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
+    stop_grace_period: 330s
+    init: true
+    healthcheck:
+      test: ["CMD-SHELL", "php artisan horizon:status | grep -q running"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - reddit_scrapper
 
@@ -88,6 +114,7 @@ volumes:
   db_data:
   vendor_data:
   node_modules_data:
+  redis_data:
 
 networks:
   reddit_scrapper:

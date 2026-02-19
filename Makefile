@@ -1,4 +1,4 @@
-.PHONY: up down build shell migrate seed fresh test logs queue key install
+.PHONY: up down build shell migrate seed fresh test logs queue key install horizon horizon-status horizon-pause horizon-continue horizon-terminate
 
 up:
 	docker compose up -d
@@ -30,6 +30,21 @@ logs:
 queue:
 	docker compose logs -f queue
 
+horizon:
+	@echo "Horizon dashboard: http://localhost:8080/horizon"
+
+horizon-status:
+	docker compose exec queue php artisan horizon:status
+
+horizon-pause:
+	docker compose exec queue php artisan horizon:pause
+
+horizon-continue:
+	docker compose exec queue php artisan horizon:continue
+
+horizon-terminate:
+	docker compose exec queue php artisan horizon:terminate
+
 key:
 	docker compose exec app php artisan key:generate
 
@@ -48,4 +63,5 @@ install:
 	@echo ""
 	@echo "Installation complete!"
 	@echo "App: http://localhost:8080"
+	@echo "Horizon: http://localhost:8080/horizon"
 	@echo "Vite: http://localhost:5173"
