@@ -238,11 +238,10 @@ return [
 
             /*
              |------------------------------------------------------------------
-             | Classify Supervisor — ClassifyPostsJob, ClassifyPostJob, CheckClassificationCompleteJob
+             | Classify Supervisor — ClassifyPostsJob, FinalizeClassificationJob
              |------------------------------------------------------------------
-             | Dual LLM calls (Anthropic + OpenAI via Concurrency::run()).
-             | Fixed workers to prevent bursty API traffic and rate limit spikes.
-             | 2 workers × 2 providers = 4 max concurrent LLM API calls.
+             | Orchestrator and finalizer jobs for the classification pipeline.
+             | Uses default redis connection with standard 300s timeout.
              */
             'classify-supervisor' => [
                 'connection' => 'redis',
@@ -259,11 +258,32 @@ return [
 
             /*
              |------------------------------------------------------------------
-             | Extract Supervisor — ExtractIdeasJob, ExtractPostIdeasJob, CheckExtractionCompleteJob
+             | Classify Chunk Supervisor — ClassifyPostsChunkJob
              |------------------------------------------------------------------
-             | Single LLM call (Anthropic Sonnet) per job.
-             | Fixed workers to prevent bursty API traffic.
-             | 2 workers = 2 max concurrent LLM API calls.
+             | Long-running chunk workers: dual LLM calls (Anthropic + OpenAI via Concurrency::run())
+             | with internal per-post retry loops. Uses redis-classify connection (retry_after=2500).
+             | Listens to 'classify-chunk' queue (separate from 'classify') to avoid timeout collision.
+             | Timeout must exceed job $timeout (2400s). Fixed workers to cap concurrent LLM calls.
+             */
+            'classify-chunk-supervisor' => [
+                'connection' => 'redis-classify',
+                'queue'      => ['classify-chunk'],
+                'balance'    => false,
+                'processes'  => 2,
+                'maxTime'    => 0,
+                'maxJobs'    => 0,
+                'memory'     => 256,
+                'tries'      => 1,
+                'timeout'    => 2460,
+                'nice'       => 0,
+            ],
+
+            /*
+             |------------------------------------------------------------------
+             | Extract Supervisor — ExtractIdeasJob, FinalizeExtractionJob
+             |------------------------------------------------------------------
+             | Orchestrator and finalizer jobs for the extraction pipeline.
+             | Uses default redis connection with standard 300s timeout.
              */
             'extract-supervisor' => [
                 'connection' => 'redis',
@@ -275,6 +295,28 @@ return [
                 'memory'     => 128,
                 'tries'      => 3,
                 'timeout'    => 300,
+                'nice'       => 0,
+            ],
+
+            /*
+             |------------------------------------------------------------------
+             | Extract Chunk Supervisor — ExtractIdeasChunkJob
+             |------------------------------------------------------------------
+             | Long-running chunk workers: single LLM call (Anthropic Sonnet) per post
+             | with internal per-post retry loops. Uses redis-extract connection (retry_after=1600).
+             | Listens to 'extract-chunk' queue (separate from 'extract') to avoid timeout collision.
+             | Timeout must exceed job $timeout (1500s). Fixed workers to cap concurrent LLM calls.
+             */
+            'extract-chunk-supervisor' => [
+                'connection' => 'redis-extract',
+                'queue'      => ['extract-chunk'],
+                'balance'    => false,
+                'processes'  => 2,
+                'maxTime'    => 0,
+                'maxJobs'    => 0,
+                'memory'     => 256,
+                'tries'      => 1,
+                'timeout'    => 1560,
                 'nice'       => 0,
             ],
 
@@ -352,6 +394,48 @@ return [
                 'memory'     => 128,
                 'tries'      => 3,
                 'timeout'    => 300,
+                'nice'       => 0,
+            ],
+
+            /*
+             |------------------------------------------------------------------
+             | Classify Chunk Supervisor (production) — ClassifyPostsChunkJob
+             |------------------------------------------------------------------
+             | Long-running chunk workers on 'classify-chunk' queue.
+             | Uses redis-classify connection (retry_after=2500).
+             | Timeout must exceed job $timeout (2400s).
+             */
+            'classify-chunk-supervisor' => [
+                'connection' => 'redis-classify',
+                'queue'      => ['classify-chunk'],
+                'balance'    => false,
+                'processes'  => 3,
+                'maxTime'    => 0,
+                'maxJobs'    => 0,
+                'memory'     => 256,
+                'tries'      => 1,
+                'timeout'    => 2460,
+                'nice'       => 0,
+            ],
+
+            /*
+             |------------------------------------------------------------------
+             | Extract Chunk Supervisor (production) — ExtractIdeasChunkJob
+             |------------------------------------------------------------------
+             | Long-running chunk workers on 'extract-chunk' queue.
+             | Uses redis-extract connection (retry_after=1600).
+             | Timeout must exceed job $timeout (1500s).
+             */
+            'extract-chunk-supervisor' => [
+                'connection' => 'redis-extract',
+                'queue'      => ['extract-chunk'],
+                'balance'    => false,
+                'processes'  => 3,
+                'maxTime'    => 0,
+                'maxJobs'    => 0,
+                'memory'     => 256,
+                'tries'      => 1,
+                'timeout'    => 1560,
                 'nice'       => 0,
             ],
 
