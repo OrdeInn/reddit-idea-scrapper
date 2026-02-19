@@ -71,16 +71,17 @@ class FetchPostsJob implements ShouldQueue
             $subreddit = $scan->subreddit;
             $cursor = $this->cursor ?? $scan->checkpoint;
 
-            // Determine date range based on scan type
-            $dateFrom = $scan->date_from ?? $this->calculateDateFrom($scan);
-            $dateTo = $scan->date_to ?? now();
+            $dateFrom = $scan->date_from;
+            $dateTo = $scan->date_to;
 
-            // Update scan with date range if not set
-            if (! $scan->date_from) {
-                $scan->update([
-                    'date_from' => $dateFrom,
-                    'date_to' => $dateTo,
-                ]);
+            // TODO: Remove legacy fallback after all existing scans have completed
+            if (! $dateFrom || ! $dateTo) {
+                Log::warning('Scan missing date range — applying legacy fallback', ['scan_id' => $scan->id]);
+                $dateFrom = $dateFrom ?? ($scan->scan_type === Scan::TYPE_RESCAN
+                    ? now('UTC')->subWeeks(config('reddit.fetch.rescan_timeframe_weeks', 2))
+                    : now('UTC')->subWeeks(config('reddit.fetch.default_timeframe_weeks', 1)));
+                $dateTo = $dateTo ?? now('UTC');
+                $scan->update(['date_from' => $dateFrom->utc(), 'date_to' => $dateTo->utc()]);
             }
 
             Log::info('Fetching posts', [
@@ -135,19 +136,6 @@ class FetchPostsJob implements ShouldQueue
             // Don't mark as failed yet - allow retries
             throw $e;
         }
-    }
-
-    /**
-     * Calculate the date to fetch from based on scan type.
-     */
-    private function calculateDateFrom(Scan $scan): Carbon
-    {
-        if ($scan->scan_type === Scan::TYPE_RESCAN) {
-            return now()->subWeeks(config('reddit.fetch.rescan_timeframe_weeks', 2));
-        }
-
-        // return now()->subMonths(config('reddit.fetch.default_timeframe_months', 3));
-        return now()->subWeeks(config('reddit.fetch.default_timeframe_weeks', 3));
     }
 
     /**

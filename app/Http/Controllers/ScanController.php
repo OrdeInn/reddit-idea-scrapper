@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StartScanRequest;
 use App\Models\Scan;
 use App\Models\Subreddit;
 use App\Services\ScanService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 
 class ScanController extends Controller
@@ -16,9 +18,14 @@ class ScanController extends Controller
     /**
      * Start a new scan for a subreddit.
      */
-    public function start(Subreddit $subreddit): JsonResponse
+    public function start(StartScanRequest $request, Subreddit $subreddit): JsonResponse
     {
-        $scan = $this->scanService->startScan($subreddit);
+        $validated = $request->validated();
+
+        $dateFrom = isset($validated['date_from']) ? Carbon::parse($validated['date_from'])->utc() : null;
+        $dateTo = isset($validated['date_to']) ? Carbon::parse($validated['date_to'])->utc() : null;
+
+        $scan = $this->scanService->startScan($subreddit, $dateFrom, $dateTo);
 
         return response()->json([
             'scan' => $this->scanService->getScanStatus($scan),

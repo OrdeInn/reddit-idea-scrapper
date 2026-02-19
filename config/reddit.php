@@ -46,9 +46,11 @@ return [
     'fetch' => [
         // First scan looks back this many months
         'default_timeframe_months' => 1,
+
+        // Used as default suggestions in the scan configuration modal and as server-side fallback when no date range is provided.
         'default_timeframe_weeks' => 1,
 
-        // Rescan looks back this many weeks for new content
+        // Used as default suggestions in the scan configuration modal and as server-side fallback when no date range is provided.
         'rescan_timeframe_weeks' => 2,
 
         // Minimum engagement thresholds to fetch a post

@@ -7,6 +7,7 @@ import Breadcrumb from '@/Components/Breadcrumb.vue'
 import BaseButton from '@/Components/BaseButton.vue'
 import BaseModal from '@/Components/BaseModal.vue'
 import StatCard from '@/Components/StatCard.vue'
+import ScanConfigModal from '@/Components/ScanConfigModal.vue'
 
 const props = defineProps({
     subreddit: {
@@ -20,6 +21,14 @@ const props = defineProps({
             active_scan: null,
             last_scan: null,
         }),
+    },
+    scan_history: {
+        type: Array,
+        default: () => [],
+    },
+    scan_defaults: {
+        type: Object,
+        default: () => ({ default_timeframe_weeks: 1, rescan_timeframe_weeks: 2 }),
     },
 })
 
@@ -39,9 +48,13 @@ const isDeleting = ref(false)
 let pollInterval = null
 let pollAbortController = null
 
+const showConfigModal = ref(false)
+const modalErrorMessage = ref(null)
+
 const isScanning = computed(() => !!scanStatus.value?.has_active_scan)
 const activeScan = computed(() => scanStatus.value?.active_scan)
 const lastScan = computed(() => scanStatus.value?.last_scan)
+const isRescan = computed(() => !!lastScan.value)
 
 const breadcrumbItems = computed(() => [
     { label: 'Dashboard', href: '/' },
@@ -67,14 +80,21 @@ const getCsrfToken = () =>
 const getErrorMessageFromResponse = async (response) => {
     try {
         const data = await response.json()
+        // Prefer first field-level validation error from Laravel's errors bag
+        if (data?.errors) {
+            const firstKey = Object.keys(data.errors)[0]
+            if (firstKey && Array.isArray(data.errors[firstKey]) && data.errors[firstKey].length) {
+                return data.errors[firstKey][0]
+            }
+        }
         if (typeof data?.message === 'string') return data.message
     } catch { /* ignore */ }
     return `Request failed (${response.status})`
 }
 
-const startScan = async () => {
+const startScan = async (dateFrom, dateTo) => {
     if (isStartingScan.value || isScanning.value) return
-    errorMessage.value = null
+    modalErrorMessage.value = null
     isStartingScan.value = true
 
     try {
@@ -83,11 +103,18 @@ const startScan = async () => {
 
         const response = await fetch(`/subreddits/${props.subreddit.id}/scan`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            body: JSON.stringify({ date_from: dateFrom, date_to: dateTo }),
         })
         if (!response.ok) throw new Error(await getErrorMessageFromResponse(response))
 
         const data = await response.json()
+        showConfigModal.value = false
         scanStatus.value = {
             ...scanStatus.value,
             has_active_scan: true,
@@ -96,9 +123,18 @@ const startScan = async () => {
 
         if (data.scan?.is_in_progress) startPolling()
     } catch (error) {
-        errorMessage.value = error instanceof Error ? error.message : 'Failed to start scan'
+        modalErrorMessage.value = error instanceof Error ? error.message : 'Failed to start scan'
     }
     isStartingScan.value = false
+}
+
+const handleScanConfirm = ({ date_from, date_to }) => {
+    startScan(date_from, date_to)
+}
+
+const handleModalClose = () => {
+    showConfigModal.value = false
+    modalErrorMessage.value = null
 }
 
 const cancelScan = async () => {
@@ -154,7 +190,7 @@ const pollStatus = async () => {
                 active_scan: data.scan?.is_failed ? data.scan : null,
                 last_scan: data.scan?.is_completed ? data.scan : scanStatus.value.last_scan,
             }
-            router.reload({ only: ['status', 'subreddit'] })
+            router.reload({ only: ['status', 'subreddit', 'scan_history'] })
         }
     } catch (error) {
         if (error?.name !== 'AbortError') {
@@ -224,7 +260,7 @@ const confirmDelete = async () => {
                         v-if="!isScanning"
                         variant="primary"
                         :loading="isStartingScan"
-                        @click="startScan"
+                        @click="showConfigModal = true"
                     >
                         <template #icon-left>
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -294,12 +330,24 @@ const confirmDelete = async () => {
         <ScanProgress
             v-if="(isScanning || activeScan?.is_failed) && activeScan"
             :scan="activeScan"
-            @retry="startScan"
+            @retry="showConfigModal = true"
             class="mb-6"
         />
 
         <!-- Ideas table -->
         <IdeasTable :subreddit-id="subreddit.id" />
+
+        <!-- Scan configuration modal -->
+        <ScanConfigModal
+            :show="showConfigModal"
+            :is-rescan="isRescan"
+            :scan-history="scan_history"
+            :defaults="scan_defaults"
+            :is-submitting="isStartingScan"
+            :error-message="modalErrorMessage"
+            @confirm="handleScanConfirm"
+            @close="handleModalClose"
+        />
 
         <!-- Delete confirmation modal -->
         <BaseModal

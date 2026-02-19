@@ -38,6 +38,11 @@ class SubredditController extends Controller
                 'avg_score' => $avgScore !== null ? round((float) $avgScore, 1) : null,
             ],
             'status' => $status,
+            'scan_history' => $this->scanService->getScanHistory($subreddit),
+            'scan_defaults' => [
+                'default_timeframe_weeks' => config('reddit.fetch.default_timeframe_weeks'),
+                'rescan_timeframe_weeks' => config('reddit.fetch.rescan_timeframe_weeks'),
+            ],
         ]);
     }
 
