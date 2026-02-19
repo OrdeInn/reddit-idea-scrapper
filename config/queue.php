@@ -44,6 +44,28 @@ return [
             'after_commit' => false,
         ],
 
+        // Dedicated connection for ClassifyPostsChunkJob workers.
+        // retry_after must exceed the chunk job's $timeout (2400s) to prevent duplicate delivery.
+        'database-classify' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+            'queue' => 'classify',
+            'retry_after' => 2500,
+            'after_commit' => false,
+        ],
+
+        // Dedicated connection for ExtractIdeasChunkJob workers.
+        // retry_after must exceed the chunk job's $timeout (1500s) to prevent duplicate delivery.
+        'database-extract' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+            'queue' => 'extract',
+            'retry_after' => 1600,
+            'after_commit' => false,
+        ],
+
         'beanstalkd' => [
             'driver' => 'beanstalkd',
             'host' => env('BEANSTALKD_QUEUE_HOST', 'localhost'),
@@ -69,6 +91,30 @@ return [
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
             'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
+            'block_for' => null,
+            'after_commit' => false,
+        ],
+
+        // Dedicated Redis connection for ClassifyPostsChunkJob workers.
+        // retry_after must exceed the chunk job's $timeout (2400s) to prevent duplicate delivery.
+        // Horizon's classify-chunk-supervisor uses this connection (timeout=2460).
+        'redis-classify' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => 'classify-chunk',
+            'retry_after' => 2500,
+            'block_for' => null,
+            'after_commit' => false,
+        ],
+
+        // Dedicated Redis connection for ExtractIdeasChunkJob workers.
+        // retry_after must exceed the chunk job's $timeout (1500s) to prevent duplicate delivery.
+        // Horizon's extract-chunk-supervisor uses this connection (timeout=1560).
+        'redis-extract' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => 'extract-chunk',
+            'retry_after' => 1600,
             'block_for' => null,
             'after_commit' => false,
         ],

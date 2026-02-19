@@ -22,6 +22,9 @@ return [
 
         // Shortcut rules for high-confidence agreement
         'shortcut_confidence' => 0.8,           // Both agree with this confidence = skip consensus calc
+
+        // Number of posts per classification chunk worker job (recommended range: 5-25)
+        'batch_chunk_size' => (int) env('LLM_CLASSIFICATION_CHUNK_SIZE', 10),
     ],
 
     /*
@@ -39,6 +42,9 @@ return [
 
         // Maximum ideas to extract per post
         'max_ideas_per_post' => 5,
+
+        // Number of posts per extraction chunk worker job (recommended range: 5-25)
+        'batch_chunk_size' => (int) env('LLM_EXTRACTION_CHUNK_SIZE', 5),
     ],
 
     /*
