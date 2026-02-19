@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Idea;
 use App\Models\Scan;
 use App\Models\Subreddit;
 use Inertia\Inertia;
@@ -34,8 +35,22 @@ class DashboardController extends Controller
                 ];
             });
 
+        // Aggregate stats for the stats bar
+        $subredditsWithScores = $subreddits->filter(fn($s) => $s['top_score'] !== null);
+        $avgScore = $subredditsWithScores->isNotEmpty()
+            ? round($subredditsWithScores->avg('top_score'), 1)
+            : null;
+
+        $stats = [
+            'total_subreddits' => $subreddits->count(),
+            'total_ideas' => $subreddits->sum('idea_count'),
+            'avg_score' => $avgScore,
+            'starred_count' => Idea::where('is_starred', true)->count(),
+        ];
+
         return Inertia::render('Dashboard', [
             'subreddits' => $subreddits,
+            'stats' => $stats,
         ]);
     }
 }

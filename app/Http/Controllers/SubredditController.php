@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreSubredditRequest;
+use App\Models\Idea;
 use App\Models\Subreddit;
 use App\Services\ScanService;
 use Illuminate\Http\RedirectResponse;
@@ -23,6 +24,9 @@ class SubredditController extends Controller
     {
         $status = $this->scanService->getSubredditStatus($subreddit);
 
+        $avgScore = Idea::whereHas('post', fn ($q) => $q->where('subreddit_id', $subreddit->id))
+            ->avg('score_overall');
+
         return Inertia::render('Subreddit/Show', [
             'subreddit' => [
                 'id' => $subreddit->id,
@@ -30,6 +34,8 @@ class SubredditController extends Controller
                 'full_name' => $subreddit->full_name,
                 'last_scanned_at' => $subreddit->last_scanned_at?->toIso8601String(),
                 'last_scanned_human' => $subreddit->last_scanned_at?->diffForHumans(),
+                'idea_count' => $subreddit->idea_count,
+                'avg_score' => $avgScore !== null ? round((float) $avgScore, 1) : null,
             ],
             'status' => $status,
         ]);

@@ -1,154 +1,248 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
+import FilterChip from './FilterChip.vue'
 
 const props = defineProps({
     filters: {
         type: Object,
         required: true,
     },
+    defaults: {
+        type: Object,
+        default: null,
+    },
 })
 
 const emit = defineEmits(['change'])
 
 const localFilters = ref({ ...props.filters })
+const showMoreFilters = ref(false)
 
-watch(() => props.filters, (newFilters) => {
-    localFilters.value = { ...newFilters }
-}, { deep: true })
+// Sync local state when parent changes filters (e.g. mode switch)
+watch(
+    () => props.filters,
+    (newFilters) => {
+        localFilters.value = { ...newFilters }
+    },
+    { deep: true }
+)
 
-const handleFilterChange = (key, value) => {
-    localFilters.value[key] = value
+// Effective defaults — use provided defaults or fallback
+const effectiveDefaults = computed(() => props.defaults ?? {
+    min_score: 1,
+    min_complexity: 1,
+    starred_only: false,
+    include_borderline: true,
+    sort_by: 'score_overall',
+    sort_dir: 'desc',
+})
+
+// Count active filters (excluding sort_by and sort_dir)
+const activeFilterCount = computed(() => {
+    const d = effectiveDefaults.value
+    const f = localFilters.value
+    let count = 0
+    if (f.min_score !== d.min_score) count++
+    if (f.min_complexity !== d.min_complexity) count++
+    if (f.starred_only !== d.starred_only) count++
+    if (f.include_borderline !== d.include_borderline) count++
+    return count
+})
+
+// Chip active states derived from filter values
+const isScore4Active = computed(() => localFilters.value.min_score >= 4)
+const isScore3Active = computed(() => localFilters.value.min_score === 3)
+const isStarredActive = computed(() => localFilters.value.starred_only === true)
+const isEasyBuildActive = computed(() => localFilters.value.min_complexity >= 3)
+
+const handleFilterChange = (updates) => {
+    localFilters.value = { ...localFilters.value, ...updates }
     emit('change', { ...localFilters.value })
 }
 
-const resetFilters = () => {
-    localFilters.value = {
-        min_score: 1,
-        min_complexity: 1,
-        starred_only: false,
-        include_borderline: true,
-        sort_by: 'score_overall',
-        sort_dir: 'desc',
-    }
+const toggleScore4 = () => {
+    handleFilterChange({ min_score: isScore4Active.value ? 1 : 4 })
+}
+
+const toggleScore3 = () => {
+    handleFilterChange({ min_score: isScore3Active.value ? 1 : 3 })
+}
+
+const toggleStarred = () => {
+    handleFilterChange({ starred_only: !localFilters.value.starred_only })
+}
+
+const toggleEasyBuild = () => {
+    handleFilterChange({ min_complexity: isEasyBuildActive.value ? 1 : 3 })
+}
+
+const toggleSortDir = () => {
+    handleFilterChange({ sort_dir: localFilters.value.sort_dir === 'desc' ? 'asc' : 'desc' })
+}
+
+const clearAllFilters = () => {
+    localFilters.value = { ...effectiveDefaults.value }
     emit('change', { ...localFilters.value })
 }
 </script>
 
 <template>
-    <div class="px-6 py-4 space-y-4">
-        <!-- First row: Score, Complexity, Starred -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <!-- Min Score -->
-            <div>
-                <label for="min-score" class="block text-sm font-medium text-gray-700 mb-1">Min Score</label>
-                <select
-                    id="min-score"
-                    :value="localFilters.min_score"
-                    @change="handleFilterChange('min_score', parseInt($event.target.value, 10))"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+    <div class="px-5 py-3 space-y-0">
+        <!-- Quick filter chips row -->
+        <div class="flex items-center gap-2 flex-nowrap overflow-x-auto py-1">
+            <!-- Scroll gradient hints on mobile -->
+            <div class="flex items-center gap-2 flex-nowrap min-w-0">
+                <FilterChip
+                    label="Score 4+"
+                    :active="isScore4Active"
+                    @toggle="toggleScore4"
+                />
+                <FilterChip
+                    label="Score 3+"
+                    :active="isScore3Active"
+                    @toggle="toggleScore3"
+                />
+                <FilterChip
+                    label="Starred"
+                    :active="isStarredActive"
+                    @toggle="toggleStarred"
+                />
+                <FilterChip
+                    label="Easy to Build"
+                    :active="isEasyBuildActive"
+                    @toggle="toggleEasyBuild"
+                />
+            </div>
+
+            <!-- Spacer -->
+            <div class="flex-1 min-w-2" />
+
+            <!-- More Filters toggle -->
+            <button
+                type="button"
+                @click="showMoreFilters = !showMoreFilters"
+                :aria-expanded="showMoreFilters"
+                aria-controls="more-filters-panel"
+                class="flex-shrink-0 inline-flex items-center gap-1.5 px-3 min-h-[44px] rounded-lg text-sm font-medium text-content-secondary hover:text-content-primary hover:bg-surface-tertiary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                Filters
+                <span
+                    v-if="activeFilterCount > 0"
+                    class="inline-flex items-center justify-center rounded-full bg-brand-500 text-content-inverse text-xs font-semibold leading-none min-w-[1.25rem] h-5 px-1"
+                    :aria-label="`${activeFilterCount} active filter${activeFilterCount !== 1 ? 's' : ''}`"
                 >
-                    <option value="1">1+</option>
-                    <option value="2">2+</option>
-                    <option value="3">3+</option>
-                    <option value="4">4+</option>
-                    <option value="5">5+</option>
-                </select>
-            </div>
-
-            <!-- Min Complexity / Buildability -->
-            <div>
-                <label for="min-complexity" class="block text-sm font-medium text-gray-700 mb-1">Buildability</label>
-                <select
-                    id="min-complexity"
-                    :value="localFilters.min_complexity"
-                    @change="handleFilterChange('min_complexity', parseInt($event.target.value, 10))"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    {{ activeFilterCount }}
+                </span>
+                <svg
+                    :class="['w-3.5 h-3.5 transition-transform duration-200', showMoreFilters ? 'rotate-180' : '']"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
                 >
-                    <option value="1">Any</option>
-                    <option value="2">2+ (Medium)</option>
-                    <option value="3">3+ (Easy)</option>
-                    <option value="4">4+ (Very Easy)</option>
-                </select>
-            </div>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
 
-            <!-- Starred Only -->
-            <div>
-                <label class="flex items-center mt-6">
-                    <input
-                        type="checkbox"
-                        :checked="localFilters.starred_only"
-                        @change="handleFilterChange('starred_only', $event.target.checked)"
-                        class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                    />
-                    <span class="ml-2 text-sm text-gray-700">Starred Only</span>
-                </label>
-            </div>
-
-            <!-- Include Borderline -->
-            <div>
-                <label class="flex items-center mt-6">
-                    <input
-                        type="checkbox"
-                        :checked="localFilters.include_borderline"
-                        @change="handleFilterChange('include_borderline', $event.target.checked)"
-                        class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                    />
-                    <span class="ml-2 text-sm text-gray-700">Include Borderline</span>
-                </label>
-            </div>
+            <!-- Clear all button -->
+            <button
+                v-if="activeFilterCount > 0"
+                type="button"
+                @click="clearAllFilters"
+                class="flex-shrink-0 min-h-[44px] px-2 text-sm font-medium text-content-tertiary hover:text-status-error transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-lg"
+            >
+                Clear all
+            </button>
         </div>
 
-        <!-- Second row: Sorting and Reset -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-            <!-- Sort By -->
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
-                <select
-                    :value="localFilters.sort_by"
-                    @change="handleFilterChange('sort_by', $event.target.value)"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                >
-                    <option value="score_overall">Overall Score</option>
-                    <option value="score_monetization">Monetization</option>
-                    <option value="score_saturation">Market Open</option>
-                    <option value="score_complexity">Buildability</option>
-                    <option value="score_demand">Demand</option>
-                    <option value="created_at">Date Posted</option>
-                </select>
-            </div>
+        <!-- More Filters collapsible panel (CSS grid animation) -->
+        <div
+            id="more-filters-panel"
+            class="grid transition-[grid-template-rows] duration-200 ease-out"
+            :style="{ gridTemplateRows: showMoreFilters ? '1fr' : '0fr' }"
+            :inert="!showMoreFilters || undefined"
+        >
+            <div class="overflow-hidden">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 pt-3 pb-1">
+                    <!-- Sort By -->
+                    <div>
+                        <label for="sort-by" class="block text-xs font-medium text-content-tertiary uppercase tracking-wide mb-1.5">
+                            Sort by
+                        </label>
+                        <select
+                            id="sort-by"
+                            :value="localFilters.sort_by"
+                            @change="handleFilterChange({ sort_by: $event.target.value })"
+                            class="w-full px-3 py-2 text-sm border border-border-default rounded-lg bg-surface-secondary text-content-primary focus:outline-none focus:border-brand-500"
+                        >
+                            <option value="score_overall">Overall Score</option>
+                            <option value="score_monetization">Monetization</option>
+                            <option value="score_saturation">Market Open</option>
+                            <option value="score_complexity">Buildability</option>
+                            <option value="score_demand">Demand</option>
+                            <option value="created_at">Date Posted</option>
+                            <option v-if="filters.sort_by === 'starred_at'" value="starred_at">Starred At</option>
+                        </select>
+                    </div>
 
-            <!-- Sort Direction Toggle -->
-            <div>
-                <button
-                    type="button"
-                    @click="handleFilterChange('sort_dir', localFilters.sort_dir === 'desc' ? 'asc' : 'desc')"
-                    class="p-2 rounded text-gray-500 hover:text-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-                    :aria-label="`Sort direction: ${localFilters.sort_dir === 'desc' ? 'descending' : 'ascending'}`"
-                    :aria-pressed="localFilters.sort_dir === 'asc'"
-                    :title="localFilters.sort_dir === 'desc' ? 'Descending' : 'Ascending'"
-                >
-                    <svg
-                        class="w-4 h-4 transition-transform"
-                        :class="{ 'rotate-180': localFilters.sort_dir === 'asc' }"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                    >
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                </button>
-            </div>
+                    <!-- Sort Direction -->
+                    <div>
+                        <span class="block text-xs font-medium text-content-tertiary uppercase tracking-wide mb-1.5">Direction</span>
+                        <button
+                            type="button"
+                            @click="toggleSortDir"
+                            :aria-label="`Sort direction: ${localFilters.sort_dir === 'desc' ? 'descending' : 'ascending'}. Click to toggle.`"
+                            :aria-pressed="localFilters.sort_dir === 'asc'"
+                            class="flex items-center gap-2 px-3 py-2 min-h-[44px] w-full border border-border-default rounded-lg bg-surface-secondary text-sm text-content-primary hover:bg-surface-tertiary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                        >
+                            <svg
+                                :class="['w-4 h-4 text-content-tertiary transition-transform duration-200', localFilters.sort_dir === 'asc' ? 'rotate-180' : '']"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                                aria-hidden="true"
+                            >
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                            {{ localFilters.sort_dir === 'desc' ? 'Descending' : 'Ascending' }}
+                        </button>
+                    </div>
 
-            <!-- Reset Button -->
-            <div>
-                <button
-                    type="button"
-                    @click="resetFilters"
-                    class="w-full px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                >
-                    Reset Filters
-                </button>
+                    <!-- Min Complexity -->
+                    <div>
+                        <label for="min-complexity" class="block text-xs font-medium text-content-tertiary uppercase tracking-wide mb-1.5">
+                            Buildability
+                        </label>
+                        <select
+                            id="min-complexity"
+                            :value="localFilters.min_complexity"
+                            @change="handleFilterChange({ min_complexity: parseInt($event.target.value, 10) })"
+                            class="w-full px-3 py-2 text-sm border border-border-default rounded-lg bg-surface-secondary text-content-primary focus:outline-none focus:border-brand-500"
+                        >
+                            <option value="1">Any</option>
+                            <option value="2">2+ Medium</option>
+                            <option value="3">3+ Easy</option>
+                            <option value="4">4+ Very Easy</option>
+                        </select>
+                    </div>
+
+                    <!-- Include Borderline -->
+                    <div>
+                        <span class="block text-xs font-medium text-content-tertiary uppercase tracking-wide mb-1.5">Borderline</span>
+                        <label class="flex items-center gap-2 min-h-[44px] cursor-pointer">
+                            <input
+                                type="checkbox"
+                                :checked="localFilters.include_borderline"
+                                @change="handleFilterChange({ include_borderline: $event.target.checked })"
+                                class="rounded border-border-default"
+                            />
+                            <span class="text-sm text-content-primary">Include borderline</span>
+                        </label>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
