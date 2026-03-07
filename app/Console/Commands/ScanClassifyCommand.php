@@ -227,7 +227,7 @@ class ScanClassifyCommand extends Command
     private function getProviders(LLMProviderFactory $factory, string $provider): array
     {
         return match ($provider) {
-            'gpt' => [LLMProviderFactory::make('openai-gpt')],
+            'gpt' => [LLMProviderFactory::make('openai-gpt5-mini')],
             'both' => $factory->classificationProviders(),
         };
     }

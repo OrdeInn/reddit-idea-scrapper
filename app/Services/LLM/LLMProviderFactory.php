@@ -58,6 +58,7 @@ class LLMProviderFactory
      * Get classification providers based on config.
      *
      * @return array<LLMProviderInterface>
+     * @throws InvalidArgumentException If a configured provider does not support classification
      */
     public static function getClassificationProviders(): array
     {
@@ -67,14 +68,24 @@ class LLMProviderFactory
             throw new InvalidArgumentException("Config 'llm.classification.providers' must be an array");
         }
 
-        return array_map(
-            fn ($name) => self::make($name),
-            $providerNames
-        );
+        return array_map(function (string $name) {
+            $provider = self::make($name);
+
+            if (! $provider->supportsClassification()) {
+                throw new InvalidArgumentException(
+                    "LLM provider '{$name}' does not support classification. " .
+                    "Check the 'capabilities' config for this provider."
+                );
+            }
+
+            return $provider;
+        }, $providerNames);
     }
 
     /**
      * Get the extraction provider based on config.
+     *
+     * @throws InvalidArgumentException If the configured provider does not support extraction
      */
     public static function getExtractionProvider(): LLMProviderInterface
     {
@@ -84,7 +95,16 @@ class LLMProviderFactory
             throw new InvalidArgumentException("Config 'llm.extraction.provider' must be a non-empty string");
         }
 
-        return self::make($providerName);
+        $provider = self::make($providerName);
+
+        if (! $provider->supportsExtraction()) {
+            throw new InvalidArgumentException(
+                "LLM provider '{$providerName}' does not support extraction. " .
+                "Check the 'capabilities' config for this provider."
+            );
+        }
+
+        return $provider;
     }
 
     /**

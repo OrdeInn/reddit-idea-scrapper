@@ -8,23 +8,16 @@ use App\Services\LLM\DTOs\ClassificationRequest;
 use App\Services\LLM\DTOs\ClassificationResponse;
 use App\Services\LLM\DTOs\ExtractionRequest;
 use App\Services\LLM\DTOs\ExtractionResponse;
+use App\Services\LLM\Prompts\ExtractionSystemPrompt;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
-class AnthropicHaikuProvider extends BaseLLMProvider
+class AnthropicProvider extends BaseLLMProvider
 {
     private const API_URL = 'https://api.anthropic.com/v1/messages';
     // Anthropic's current required API version header value (date-style, not model age).
     private const API_VERSION = '2023-06-01';
-
-    /**
-     * Get the provider name.
-     */
-    public function getProviderName(): string
-    {
-        return 'anthropic-haiku';
-    }
 
     /**
      * Get the model name.
@@ -55,7 +48,7 @@ class AnthropicHaikuProvider extends BaseLLMProvider
     }
 
     /**
-     * Classify a Reddit post using Anthropic Haiku.
+     * Classify a Reddit post using the configured Anthropic model.
      */
     public function classify(ClassificationRequest $request): ClassificationResponse
     {
@@ -97,7 +90,7 @@ class AnthropicHaikuProvider extends BaseLLMProvider
                 postId: $request->postId
             );
 
-            Log::error('Anthropic Haiku API connection error', [
+            Log::error('Anthropic API connection error', [
                 'error' => $e->getMessage(),
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
@@ -129,7 +122,7 @@ class AnthropicHaikuProvider extends BaseLLMProvider
                 postId: $request->postId
             );
 
-            Log::error('Anthropic Haiku API error', [
+            Log::error('Anthropic API error', [
                 'status' => $status,
                 'error' => $error,
                 'body_length' => strlen($body),
@@ -138,7 +131,7 @@ class AnthropicHaikuProvider extends BaseLLMProvider
                 'model' => $this->model,
             ]);
 
-            if ($status >= 500 || $status === 429) {
+            if ($status >= 500 || $status === 429 || $status === 408) {
                 throw new TransientClassificationException(
                     message: "Anthropic API returned status {$status}: {$error}",
                     provider: $this->getProviderName()
@@ -166,7 +159,7 @@ class AnthropicHaikuProvider extends BaseLLMProvider
                 postId: $request->postId
             );
 
-            Log::warning('Anthropic Haiku API returned invalid JSON response', [
+            Log::warning('Anthropic API returned invalid JSON response', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
             ]);
@@ -221,7 +214,7 @@ class AnthropicHaikuProvider extends BaseLLMProvider
                 postId: $request->postId
             );
 
-            Log::warning('Anthropic Haiku API returned empty content', [
+            Log::warning('Anthropic API returned empty content', [
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
                 'stop_reason' => $data['stop_reason'] ?? null,
@@ -248,7 +241,7 @@ class AnthropicHaikuProvider extends BaseLLMProvider
                 postId: $request->postId
             );
 
-            Log::warning('Failed to parse Anthropic Haiku JSON response', [
+            Log::warning('Failed to parse Anthropic JSON response', [
                 'content_length' => strlen($content),
                 'provider' => $this->getProviderName(),
                 'model' => $this->model,
@@ -275,31 +268,182 @@ class AnthropicHaikuProvider extends BaseLLMProvider
     }
 
     /**
-     * Extract SaaS ideas from a post.
-     * This provider does not support extraction.
+     * Extract SaaS ideas from a Reddit post using the configured Anthropic model.
+     *
+     * @throws RuntimeException If this provider instance does not support extraction.
      */
     public function extract(ExtractionRequest $request): ExtractionResponse
     {
-        throw new RuntimeException(
-            'Anthropic Haiku classification provider does not support extraction. ' .
-            'Use supportsExtraction() to check capability before calling extract().'
+        if (! $this->supportsExtraction()) {
+            throw new RuntimeException(
+                "Anthropic provider ({$this->getProviderName()}) does not support extraction. " .
+                'Use supportsExtraction() to check capability before calling extract().'
+            );
+        }
+
+        $requestPayload = [
+            'model' => $this->model,
+            'max_tokens' => $this->maxTokens,
+            'temperature' => $this->temperature,
+            'messages' => [
+                [
+                    'role' => 'user',
+                    'content' => $this->toAnthropicContent($request->getPromptContent()),
+                ],
+            ],
+            'system' => ExtractionSystemPrompt::get(),
+        ];
+
+        $requestId = $this->getLogger()->logRequest(
+            provider: $this->getProviderName(),
+            model: $this->model,
+            operation: 'extraction',
+            requestPayload: $requestPayload,
+            postId: $request->postId
         );
-    }
+        $startTime = microtime(true);
 
-    /**
-     * Check if provider supports classification.
-     */
-    public function supportsClassification(): bool
-    {
-        return true;
-    }
+        try {
+            $response = $this->client()->post($this->getApiUrl(), $requestPayload);
+        } catch (ConnectionException $e) {
+            $durationMs = (microtime(true) - $startTime) * 1000;
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'extraction',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: $e->getMessage(),
+                postId: $request->postId
+            );
 
-    /**
-     * Check if provider supports extraction.
-     */
-    public function supportsExtraction(): bool
-    {
-        return false;
+            Log::error('Anthropic API connection error during extraction', [
+                'error' => $e->getMessage(),
+                'provider' => $this->getProviderName(),
+                'model' => $this->model,
+            ]);
+
+            return new ExtractionResponse(
+                ideas: collect(),
+                rawResponse: ['error' => 'network-error', 'message' => 'Failed to connect to API'],
+            );
+        }
+
+        $durationMs = (microtime(true) - $startTime) * 1000;
+
+        if ($response->failed()) {
+            $status = $response->status();
+            $error = $response->json('error.message') ?? $response->body();
+
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'extraction',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: "HTTP {$status}: {$error}",
+                postId: $request->postId
+            );
+
+            Log::error('Anthropic API error during extraction', [
+                'status' => $status,
+                'error' => $error,
+                'provider' => $this->getProviderName(),
+                'model' => $this->model,
+            ]);
+
+            throw new RuntimeException("Anthropic API error ({$status}): {$error}");
+        }
+
+        $data = $response->json();
+
+        if (! is_array($data)) {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'extraction',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Response is not valid JSON',
+                postId: $request->postId
+            );
+
+            Log::warning('Anthropic API returned invalid JSON response during extraction', [
+                'provider' => $this->getProviderName(),
+                'model' => $this->model,
+            ]);
+
+            return new ExtractionResponse(
+                ideas: collect(),
+                rawResponse: ['body' => substr($response->body(), 0, 2000)],
+            );
+        }
+
+        $rawResponse = $data;
+        $content = $this->extractTextFromAnthropicContent($data['content'] ?? null);
+
+        if (empty($content)) {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'extraction',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Response content is empty',
+                postId: $request->postId
+            );
+
+            Log::warning('Anthropic API returned empty content during extraction', [
+                'provider' => $this->getProviderName(),
+                'model' => $this->model,
+            ]);
+
+            return new ExtractionResponse(
+                ideas: collect(),
+                rawResponse: $rawResponse,
+            );
+        }
+
+        $stopReason = $data['stop_reason'] ?? null;
+        if ($stopReason === 'max_tokens') {
+            Log::warning('Anthropic response was truncated due to max_tokens', [
+                'provider' => $this->getProviderName(),
+                'model' => $this->model,
+            ]);
+        }
+
+        $parsed = $this->parseJsonResponse($content);
+
+        // Handle case where model returns an object with ideas array
+        if (isset($parsed['ideas']) && is_array($parsed['ideas'])) {
+            $parsed = $parsed['ideas'];
+        }
+
+        // If it's an associative array (single idea), wrap it
+        if (! empty($parsed) && ! isset($parsed[0])) {
+            $parsed = [$parsed];
+        }
+
+        $this->getLogger()->logResponse(
+            requestId: $requestId,
+            provider: $this->getProviderName(),
+            model: $this->model,
+            operation: 'extraction',
+            parsedResult: $parsed,
+            durationMs: $durationMs,
+            success: true,
+            postId: $request->postId
+        );
+
+        return ExtractionResponse::fromJson($parsed, $rawResponse);
     }
 
     /**

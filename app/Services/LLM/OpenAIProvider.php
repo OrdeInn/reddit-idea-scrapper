@@ -8,25 +8,17 @@ use App\Services\LLM\DTOs\ClassificationRequest;
 use App\Services\LLM\DTOs\ClassificationResponse;
 use App\Services\LLM\DTOs\ExtractionRequest;
 use App\Services\LLM\DTOs\ExtractionResponse;
+use App\Services\LLM\Prompts\ExtractionSystemPrompt;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
- * OpenAI GPT classifier provider for classification tasks.
+ * OpenAI GPT provider for classification and extraction tasks.
  */
 class OpenAIProvider extends BaseLLMProvider
 {
     private const API_URL = 'https://api.openai.com/v1/chat/completions';
-
-    /**
-     * Get the provider name.
-     * Returns 'openai' to match DB column mapping (gpt_verdict, gpt_confidence, etc.)
-     */
-    public function getProviderName(): string
-    {
-        return 'openai';
-    }
 
     /**
      * Get the model name.
@@ -56,7 +48,7 @@ class OpenAIProvider extends BaseLLMProvider
     }
 
     /**
-     * Classify a Reddit post using GPT-5-mini.
+     * Classify a Reddit post using OpenAI GPT.
      */
     public function classify(ClassificationRequest $request): ClassificationResponse
     {
@@ -298,7 +290,7 @@ class OpenAIProvider extends BaseLLMProvider
                 'status' => $response->status(),
                 'body_length' => strlen($response->body()),
                 'body_sha256' => hash('sha256', $response->body()),
-                'body_snippet' => substr($response->body(), 0, 2000),
+                'body_snippet' => $this->shouldIncludeSensitiveLogData() ? substr($response->body(), 0, 2000) : null,
             ]);
 
             throw new TransientClassificationException(
@@ -350,33 +342,242 @@ class OpenAIProvider extends BaseLLMProvider
     }
 
     /**
-     * Extract SaaS ideas from a post.
-     * This provider does not support extraction.
+     * Extract SaaS ideas from a Reddit post using OpenAI GPT.
      *
-     * @throws RuntimeException Always throws exception as extraction is not supported
+     * @throws RuntimeException If this provider instance does not support extraction.
      */
     public function extract(ExtractionRequest $request): ExtractionResponse
     {
-        throw new RuntimeException(
-            'OpenAI classification provider does not support extraction. ' .
-            'Use supportsExtraction() to check capability before calling extract().'
+        if (! $this->supportsExtraction()) {
+            throw new RuntimeException(
+                "OpenAI provider ({$this->getProviderName()}) does not support extraction. " .
+                'Use supportsExtraction() to check capability before calling extract().'
+            );
+        }
+
+        $requestPayload = [
+            'model' => $this->model,
+            'messages' => [
+                [
+                    'role' => 'system',
+                    'content' => ExtractionSystemPrompt::get(),
+                ],
+                [
+                    'role' => 'user',
+                    'content' => $request->getPromptContent(),
+                ],
+            ],
+        ];
+        $requestPayload[$this->getMaxTokensParamName()] = $this->maxTokens;
+        $temperature = $this->getTemperaturePayloadValue();
+        if ($temperature !== null) {
+            $requestPayload['temperature'] = $temperature;
+        }
+
+        $requestId = $this->getLogger()->logRequest(
+            provider: $this->getProviderName(),
+            model: $this->model,
+            operation: 'extraction',
+            requestPayload: $requestPayload,
+            postId: $request->postId
         );
-    }
+        $startTime = microtime(true);
 
-    /**
-     * Check if provider supports classification.
-     */
-    public function supportsClassification(): bool
-    {
-        return true;
-    }
+        try {
+            $response = $this->client()->post($this->getApiUrl(), $requestPayload);
+        } catch (ConnectionException $e) {
+            $durationMs = (microtime(true) - $startTime) * 1000;
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'extraction',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: $e->getMessage(),
+                postId: $request->postId
+            );
 
-    /**
-     * Check if provider supports extraction.
-     */
-    public function supportsExtraction(): bool
-    {
-        return false;
+            Log::error('OpenAI API connection error during extraction', [
+                'error' => $e->getMessage(),
+                'provider' => $this->getProviderName(),
+                'model' => $this->model,
+            ]);
+
+            return new ExtractionResponse(
+                ideas: collect(),
+                rawResponse: ['error' => 'network-error', 'message' => 'Failed to connect to API'],
+            );
+        }
+
+        $durationMs = (microtime(true) - $startTime) * 1000;
+
+        if ($response->failed()) {
+            $status = $response->status();
+            $error = $response->json('error.message') ?? $response->body();
+
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'extraction',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: "HTTP {$status}: {$error}",
+                postId: $request->postId
+            );
+
+            Log::error('OpenAI API error during extraction', [
+                'status' => $status,
+                'error' => $error,
+                'provider' => $this->getProviderName(),
+                'model' => $this->model,
+            ]);
+
+            throw new RuntimeException("OpenAI API error ({$status}): {$error}");
+        }
+
+        $data = $response->json();
+
+        if (! is_array($data)) {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'extraction',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Response is not valid JSON',
+                postId: $request->postId
+            );
+
+            Log::warning('OpenAI API returned invalid JSON response during extraction', [
+                'provider' => $this->getProviderName(),
+                'model' => $this->model,
+            ]);
+
+            return new ExtractionResponse(
+                ideas: collect(),
+                rawResponse: ['body' => substr($response->body(), 0, 2000)],
+            );
+        }
+
+        $rawResponse = $data;
+
+        // Check for content filter during extraction
+        $finishReason = $data['choices'][0]['finish_reason'] ?? null;
+        if ($finishReason === 'content_filter') {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'extraction',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Content filtered by API',
+                postId: $request->postId
+            );
+
+            Log::warning('OpenAI content filter triggered during extraction', [
+                'provider' => $this->getProviderName(),
+                'model' => $this->model,
+            ]);
+
+            return new ExtractionResponse(
+                ideas: collect(),
+                rawResponse: $rawResponse,
+            );
+        }
+
+        $message = $data['choices'][0]['message'] ?? null;
+
+        // Handle refusal during extraction
+        if (is_array($message) && isset($message['refusal']) && is_string($message['refusal']) && trim($message['refusal']) !== '') {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'extraction',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Refusal: ' . $message['refusal'],
+                postId: $request->postId
+            );
+
+            Log::warning('OpenAI refusal during extraction', [
+                'provider' => $this->getProviderName(),
+                'model' => $this->model,
+            ]);
+
+            return new ExtractionResponse(
+                ideas: collect(),
+                rawResponse: $rawResponse,
+            );
+        }
+
+        $contentRaw = is_array($message) ? ($message['content'] ?? null) : null;
+        $content = $this->normalizeMessageContent($contentRaw);
+
+        if (empty($content)) {
+            $this->getLogger()->logResponse(
+                requestId: $requestId,
+                provider: $this->getProviderName(),
+                model: $this->model,
+                operation: 'extraction',
+                parsedResult: [],
+                durationMs: $durationMs,
+                success: false,
+                error: 'Response content is empty',
+                postId: $request->postId
+            );
+
+            Log::warning('OpenAI API returned empty content during extraction', [
+                'provider' => $this->getProviderName(),
+                'model' => $this->model,
+            ]);
+
+            return new ExtractionResponse(
+                ideas: collect(),
+                rawResponse: $rawResponse,
+            );
+        }
+
+        if ($finishReason === 'length') {
+            Log::warning('OpenAI response was truncated due to max tokens', [
+                'provider' => $this->getProviderName(),
+                'model' => $this->model,
+            ]);
+        }
+
+        $parsed = $this->parseJsonResponse($content);
+
+        // Handle case where model returns an object with ideas array
+        if (isset($parsed['ideas']) && is_array($parsed['ideas'])) {
+            $parsed = $parsed['ideas'];
+        }
+
+        // If it's an associative array (single idea), wrap it
+        if (! empty($parsed) && ! isset($parsed[0])) {
+            $parsed = [$parsed];
+        }
+
+        $this->getLogger()->logResponse(
+            requestId: $requestId,
+            provider: $this->getProviderName(),
+            model: $this->model,
+            operation: 'extraction',
+            parsedResult: $parsed,
+            durationMs: $durationMs,
+            success: true,
+            postId: $request->postId
+        );
+
+        return ExtractionResponse::fromJson($parsed, $rawResponse);
     }
 
     /**

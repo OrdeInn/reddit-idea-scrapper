@@ -9,11 +9,15 @@ return [
     | Configuration for the dual-gate classification pipeline that filters
     | posts before expensive extraction.
     |
+    | Available classification providers (require haiku_x/gpt_x DB columns):
+    |   - anthropic-haiku (maps to haiku_x columns)
+    |   - openai-gpt5-mini      (maps to gpt_x columns)
+    |
     */
 
     'classification' => [
         // Which providers to use for classification (all run in parallel)
-        'providers' => ['anthropic-haiku', 'openai-gpt'],
+        'providers' => ['anthropic-haiku', 'openai-gpt5-mini'],
 
         // Consensus score thresholds
         // score = average(confidence × keep_flag) across configured providers
@@ -33,6 +37,14 @@ return [
     |--------------------------------------------------------------------------
     |
     | Configuration for the idea extraction pipeline.
+    |
+    | Available extraction providers:
+    |   - anthropic-sonnet (default, proven)
+    |   - anthropic-opus   (higher quality, higher cost)
+    |   - openai-gpt5-2     (GPT 5.2 alternative)
+    |
+    | NOTE: anthropic-opus and openai-gpt5-2 lack DB column mapping and cannot
+    | be used as classification providers without a future migration + job update.
     |
     */
 
@@ -55,31 +67,62 @@ return [
     | Settings for each LLM provider including API keys, model names, and
     | request parameters.
     |
+    | Each entry must have:
+    |   - class: The provider class (AnthropicProvider or OpenAIProvider)
+    |   - provider_name: Value returned by getProviderName() — used for DB column mapping
+    |   - capabilities: Array of supported operations ('classification', 'extraction')
+    |
     */
 
     'providers' => [
         'anthropic-sonnet' => [
-            'class' => App\Services\LLM\AnthropicSonnetProvider::class,
+            'class' => App\Services\LLM\AnthropicProvider::class,
             'api_key' => env('ANTHROPIC_API_KEY', ''),
             'model' => 'claude-sonnet-4-5-20250929',
             'max_tokens' => 4096,
             'temperature' => 0.5,
+            'provider_name' => 'anthropic-sonnet',
+            'capabilities' => ['classification', 'extraction'],
         ],
 
         'anthropic-haiku' => [
-            'class' => App\Services\LLM\AnthropicHaikuProvider::class,
+            'class' => App\Services\LLM\AnthropicProvider::class,
             'api_key' => env('ANTHROPIC_API_KEY', ''),
             'model' => 'claude-haiku-4-5-20251001',
             'max_tokens' => 1024,
             'temperature' => 0.3,
+            'provider_name' => 'anthropic-haiku',
+            'capabilities' => ['classification'],
         ],
 
-        'openai-gpt' => [
+        'anthropic-opus' => [
+            'class' => App\Services\LLM\AnthropicProvider::class,
+            'api_key' => env('ANTHROPIC_API_KEY', ''),
+            'model' => 'claude-opus-4-6',
+            'max_tokens' => 4096,
+            'temperature' => 0.5,
+            'provider_name' => 'anthropic-opus',
+            'capabilities' => ['extraction'],
+        ],
+
+        'openai-gpt5-mini' => [
             'class' => App\Services\LLM\OpenAIProvider::class,
             'api_key' => env('OPENAI_API_KEY', ''),
             'model' => 'gpt-5-mini-2025-08-07',
             'max_tokens' => 1024,
             'temperature' => 0.3,
+            'provider_name' => 'openai',
+            'capabilities' => ['classification'],
+        ],
+
+        'openai-gpt5-2' => [
+            'class' => App\Services\LLM\OpenAIProvider::class,
+            'api_key' => env('OPENAI_API_KEY', ''),
+            'model' => 'gpt-5.2-2026-01-24',
+            'max_tokens' => 4096,
+            'temperature' => 0.5,
+            'provider_name' => 'openai-gpt5-2',
+            'capabilities' => ['extraction'],
         ],
 
     ],

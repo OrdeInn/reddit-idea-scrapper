@@ -14,12 +14,15 @@ abstract class BaseLLMProvider implements LLMProviderInterface
     protected float $temperature;
     protected int $connectTimeout;
     protected int $requestTimeout;
+    protected string $providerName;
+    protected array $capabilities;
     protected ?LLMLogger $logger = null;
 
     public function __construct(array $config)
     {
         $apiKey = $config['api_key'] ?? '';
         $model = $config['model'] ?? '';
+        $providerName = $config['provider_name'] ?? null;
 
         if (! is_string($apiKey)) {
             throw new \InvalidArgumentException('Config api_key must be a string');
@@ -27,9 +30,14 @@ abstract class BaseLLMProvider implements LLMProviderInterface
         if (! is_string($model)) {
             throw new \InvalidArgumentException('Config model must be a string');
         }
+        if (! is_string($providerName) || $providerName === '') {
+            throw new \InvalidArgumentException('Config provider_name must be a non-empty string');
+        }
 
         $this->apiKey = $apiKey;
         $this->model = $model;
+        $this->providerName = $providerName;
+        $this->capabilities = $config['capabilities'] ?? ['classification', 'extraction'];
         $this->maxTokens = (int) ($config['max_tokens'] ?? 1024);
         $this->temperature = (float) ($config['temperature'] ?? 0.5);
         $this->connectTimeout = (int) config('llm.timeouts.connect', 10);
@@ -314,19 +322,27 @@ abstract class BaseLLMProvider implements LLMProviderInterface
     }
 
     /**
-     * Default: supports classification.
+     * Get the provider name from config.
      */
-    public function supportsClassification(): bool
+    public function getProviderName(): string
     {
-        return true;
+        return $this->providerName;
     }
 
     /**
-     * Default: supports extraction.
+     * Supports classification if 'classification' is in configured capabilities.
+     */
+    public function supportsClassification(): bool
+    {
+        return in_array('classification', $this->capabilities, true);
+    }
+
+    /**
+     * Supports extraction if 'extraction' is in configured capabilities.
      */
     public function supportsExtraction(): bool
     {
-        return true;
+        return in_array('extraction', $this->capabilities, true);
     }
 
     /**
