@@ -37,6 +37,7 @@ class Idea extends Model
         'score_overall',
         'source_quote',
         'classification_status',
+        'extraction_provider',
         'is_starred',
         'starred_at',
     ];
@@ -227,6 +228,32 @@ class Idea extends Model
     public function scopeCreatedBetween(Builder $query, $from, $to)
     {
         return $query->whereBetween('created_at', [$from, $to]);
+    }
+
+    /**
+     * Scope for ideas extracted by a specific provider.
+     */
+    public function scopeByExtractionProvider(Builder $query, string $provider)
+    {
+        return $query->where('extraction_provider', $provider);
+    }
+
+    /**
+     * Scope for ideas filtered by classification provider agreement pattern.
+     * Only considers classifications where both providers have completed.
+     */
+    public function scopeByClassificationAgreement(Builder $query, string $agreementType)
+    {
+        return $query->whereHas('post.classification', function ($q) use ($agreementType) {
+            $q->where('haiku_completed', true)->where('gpt_completed', true);
+
+            match ($agreementType) {
+                'all_agree'       => $q->whereColumn('haiku_verdict', 'gpt_verdict'),
+                'all_disagree'    => $q->whereColumn('haiku_verdict', '!=', 'gpt_verdict'),
+                'haiku_only_keep' => $q->where('haiku_verdict', 'keep')->where('gpt_verdict', 'skip'),
+                'gpt_only_keep'   => $q->where('gpt_verdict', 'keep')->where('haiku_verdict', 'skip'),
+            };
+        });
     }
 
     /**

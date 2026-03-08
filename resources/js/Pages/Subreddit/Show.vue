@@ -2,6 +2,7 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { Head, router } from '@inertiajs/vue3'
 import IdeasTable from '@/Components/IdeasTable.vue'
+import ProviderAnalyticsPanel from '@/Components/ProviderAnalyticsPanel.vue'
 import ScanProgress from '@/Components/ScanProgress.vue'
 import Breadcrumb from '@/Components/Breadcrumb.vue'
 import BaseButton from '@/Components/BaseButton.vue'
@@ -337,6 +338,9 @@ const confirmDelete = async () => {
             @retry="showConfigModal = true"
             class="mb-6"
         />
+
+        <!-- Provider analytics panel -->
+        <ProviderAnalyticsPanel :subreddit-id="subreddit.id" class="mb-6" />
 
         <!-- Ideas table -->
         <IdeasTable ref="ideasTable" :subreddit-id="subreddit.id" />

@@ -40,6 +40,8 @@ const getDefaultFilters = () => ({
     include_borderline: true,
     sort_by: props.mode === 'starred' ? 'starred_at' : 'score_overall',
     sort_dir: 'desc',
+    extraction_provider: '',
+    classification_agreement: '',
 })
 
 const filters = ref(getDefaultFilters())
@@ -55,7 +57,9 @@ const hasActiveFilters = computed(() => {
         f.min_score !== d.min_score ||
         f.min_complexity !== d.min_complexity ||
         f.starred_only !== d.starred_only ||
-        f.include_borderline !== d.include_borderline
+        f.include_borderline !== d.include_borderline ||
+        (f.extraction_provider ?? '') !== '' ||
+        (f.classification_agreement ?? '') !== ''
     )
 })
 
@@ -67,8 +71,13 @@ const fetchIdeas = async (page = 1) => {
 
     loading.value = true
 
+    const rawFilters = { ...filters.value }
+    // Omit empty string provider filters so backend doesn't receive blank values
+    if (!rawFilters.extraction_provider) delete rawFilters.extraction_provider
+    if (!rawFilters.classification_agreement) delete rawFilters.classification_agreement
+
     const params = new URLSearchParams({
-        ...filters.value,
+        ...rawFilters,
         page,
         per_page: perPage.value,
     })

@@ -35,6 +35,8 @@ const effectiveDefaults = computed(() => props.defaults ?? {
     include_borderline: true,
     sort_by: 'score_overall',
     sort_dir: 'desc',
+    extraction_provider: '',
+    classification_agreement: '',
 })
 
 // Count active filters (excluding sort_by and sort_dir)
@@ -46,6 +48,8 @@ const activeFilterCount = computed(() => {
     if (f.min_complexity !== d.min_complexity) count++
     if (f.starred_only !== d.starred_only) count++
     if (f.include_borderline !== d.include_borderline) count++
+    if (f.extraction_provider && f.extraction_provider !== '') count++
+    if (f.classification_agreement && f.classification_agreement !== '') count++
     return count
 })
 
@@ -54,6 +58,7 @@ const isScore4Active = computed(() => localFilters.value.min_score >= 4)
 const isScore3Active = computed(() => localFilters.value.min_score === 3)
 const isStarredActive = computed(() => localFilters.value.starred_only === true)
 const isEasyBuildActive = computed(() => localFilters.value.min_complexity >= 3)
+const isDisagreementsActive = computed(() => localFilters.value.classification_agreement === 'all_disagree')
 
 const handleFilterChange = (updates) => {
     localFilters.value = { ...localFilters.value, ...updates }
@@ -74,6 +79,10 @@ const toggleStarred = () => {
 
 const toggleEasyBuild = () => {
     handleFilterChange({ min_complexity: isEasyBuildActive.value ? 1 : 3 })
+}
+
+const toggleDisagreements = () => {
+    handleFilterChange({ classification_agreement: isDisagreementsActive.value ? '' : 'all_disagree' })
 }
 
 const toggleSortDir = () => {
@@ -111,6 +120,11 @@ const clearAllFilters = () => {
                     label="Easy to Build"
                     :active="isEasyBuildActive"
                     @toggle="toggleEasyBuild"
+                />
+                <FilterChip
+                    label="Disagreements"
+                    :active="isDisagreementsActive"
+                    @toggle="toggleDisagreements"
                 />
             </div>
 
@@ -241,6 +255,43 @@ const clearAllFilters = () => {
                             />
                             <span class="text-sm text-content-primary">Include borderline</span>
                         </label>
+                    </div>
+
+                    <!-- Extraction Provider -->
+                    <div>
+                        <label for="extraction-provider" class="block text-xs font-medium text-content-tertiary uppercase tracking-wide mb-1.5">
+                            Extraction Provider
+                        </label>
+                        <select
+                            id="extraction-provider"
+                            :value="localFilters.extraction_provider"
+                            @change="handleFilterChange({ extraction_provider: $event.target.value })"
+                            class="w-full px-3 py-2 text-sm border border-border-default rounded-lg bg-surface-secondary text-content-primary focus:outline-none focus:border-brand-500"
+                        >
+                            <option value="">All Providers</option>
+                            <option value="anthropic-sonnet">Sonnet</option>
+                            <option value="anthropic-opus">Opus</option>
+                            <option value="openai-gpt5-2">GPT-5.2</option>
+                        </select>
+                    </div>
+
+                    <!-- Provider Agreement -->
+                    <div>
+                        <label for="classification-agreement" class="block text-xs font-medium text-content-tertiary uppercase tracking-wide mb-1.5">
+                            Provider Agreement
+                        </label>
+                        <select
+                            id="classification-agreement"
+                            :value="localFilters.classification_agreement"
+                            @change="handleFilterChange({ classification_agreement: $event.target.value })"
+                            class="w-full px-3 py-2 text-sm border border-border-default rounded-lg bg-surface-secondary text-content-primary focus:outline-none focus:border-brand-500"
+                        >
+                            <option value="">Any</option>
+                            <option value="all_agree">Both Agree</option>
+                            <option value="all_disagree">Any Disagreement</option>
+                            <option value="haiku_only_keep">Haiku Keep, GPT Skip</option>
+                            <option value="gpt_only_keep">GPT Keep, Haiku Skip</option>
+                        </select>
                     </div>
                 </div>
             </div>

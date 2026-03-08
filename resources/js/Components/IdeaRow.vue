@@ -1,6 +1,8 @@
 <script setup>
 import { ref, computed } from 'vue'
 import ScoreGauge from './ScoreGauge.vue'
+import ProviderBadge from './ProviderBadge.vue'
+import ClassificationDetailModal from './ClassificationDetailModal.vue'
 
 const props = defineProps({
     idea: {
@@ -23,6 +25,8 @@ const emit = defineEmits(['toggle', 'star'])
 const starAnimating = ref(false)
 // Copy feedback state
 const copyFeedback = ref(null)
+// Classification modal
+const showClassificationModal = ref(false)
 
 const prefersReducedMotion =
     typeof window !== 'undefined'
@@ -72,6 +76,15 @@ const redditUrl = computed(() => {
     return props.idea.post ? `https://reddit.com${props.idea.post.permalink}` : null
 })
 
+const providersSummary = computed(() => props.idea.post?.classification?.providers_summary ?? [])
+
+const providersDisagreed = computed(() => {
+    const completed = providersSummary.value.filter(p => p.completed)
+    if (completed.length < 2) return false
+    const verdicts = new Set(completed.map(p => p.verdict))
+    return verdicts.size > 1
+})
+
 const scoreEntries = [
     { key: 'score_overall', label: 'Overall' },
     { key: 'score_monetization', label: 'Monetization' },
@@ -117,7 +130,7 @@ const scoreEntries = [
                 </button>
             </div>
 
-            <!-- Title + borderline dot -->
+            <!-- Title + borderline dot + provider badges -->
             <div class="min-w-0">
                 <div class="flex items-center gap-2">
                     <span class="font-semibold text-content-primary text-sm leading-snug line-clamp-2">
@@ -130,6 +143,29 @@ const scoreEntries = [
                         title="Borderline idea"
                         aria-label="Borderline idea"
                     />
+                </div>
+                <!-- Provider badges strip (desktop only) -->
+                <div
+                    v-if="idea.extraction_provider || providersSummary.length > 0"
+                    class="hidden md:flex items-center gap-1 mt-1.5 flex-wrap"
+                    aria-label="Provider badges"
+                >
+                    <ProviderBadge
+                        v-if="idea.extraction_provider"
+                        :provider="idea.extraction_provider"
+                        size="xs"
+                        :title="`Extracted by ${idea.extraction_provider}`"
+                    />
+                    <template v-if="providersSummary.length > 0">
+                        <span class="text-[9px] text-content-tertiary font-medium uppercase tracking-wide" aria-hidden="true">·</span>
+                        <ProviderBadge
+                            v-for="p in providersSummary"
+                            :key="p.name"
+                            :provider="p.name"
+                            size="xs"
+                            :title="`Classified by ${p.label}: ${p.verdict ?? 'pending'}`"
+                        />
+                    </template>
                 </div>
             </div>
 
@@ -196,6 +232,61 @@ const scoreEntries = [
             <div class="overflow-hidden">
                 <div class="mx-5 mb-4 rounded-r-lg border-l-4 border-brand-500 bg-surface-tertiary">
                     <div class="p-5 space-y-5">
+                        <!-- Providers section -->
+                        <div>
+                            <h4 class="text-xs font-semibold text-content-tertiary uppercase tracking-wide mb-2.5">Providers</h4>
+                            <div class="space-y-2">
+                                <!-- Extraction provider (always shown, null renders as "Unknown") -->
+                                <div class="flex items-center gap-2.5">
+                                    <span class="text-xs text-content-tertiary w-20 flex-shrink-0">Extracted by</span>
+                                    <ProviderBadge
+                                        :provider="idea.extraction_provider"
+                                        size="sm"
+                                        :show-model="true"
+                                    />
+                                </div>
+                                <!-- Classification providers -->
+                                <div v-if="providersSummary.length > 0" class="flex items-start gap-2.5">
+                                    <span class="text-xs text-content-tertiary w-20 flex-shrink-0 pt-0.5">Classified by</span>
+                                    <div class="flex flex-wrap items-center gap-1.5">
+                                        <ProviderBadge
+                                            v-for="p in providersSummary"
+                                            :key="p.name"
+                                            :provider="p.name"
+                                            size="sm"
+                                            :show-model="true"
+                                        />
+                                        <!-- Disagreement indicator -->
+                                        <span
+                                            v-if="providersDisagreed"
+                                            class="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400"
+                                            role="note"
+                                            aria-label="Providers disagreed"
+                                        >
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            Disagreed
+                                        </span>
+                                    </div>
+                                </div>
+                                <!-- View details link -->
+                                <div v-if="providersSummary.some(p => p.completed)" class="flex items-center gap-2.5">
+                                    <span class="w-20 flex-shrink-0" aria-hidden="true" />
+                                    <button
+                                        type="button"
+                                        @click.stop="showClassificationModal = true"
+                                        class="inline-flex items-center gap-1 text-xs text-brand-500 hover:text-brand-600 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded"
+                                    >
+                                        View classification details
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Problem & Solution -->
                         <div class="grid md:grid-cols-2 gap-4">
                             <div>
@@ -337,4 +428,12 @@ const scoreEntries = [
             </div>
         </div>
     </div>
+
+    <!-- Classification detail modal -->
+    <ClassificationDetailModal
+        :open="showClassificationModal"
+        :idea-id="idea.id"
+        :post-title="idea.post?.title ?? ''"
+        @close="showClassificationModal = false"
+    />
 </template>

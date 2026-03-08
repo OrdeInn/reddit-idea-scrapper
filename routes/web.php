@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\IdeaController;
+use App\Http\Controllers\ProviderAnalyticsController;
 use App\Http\Controllers\ScanController;
 use App\Http\Controllers\SubredditController;
 use Illuminate\Support\Facades\Route;
@@ -28,6 +29,7 @@ Route::post('/scans/{scan}/retry', [ScanController::class, 'retry'])->name('scan
 
 // Ideas
 Route::get('/subreddits/{subreddit}/ideas', [IdeaController::class, 'index'])->name('ideas.index');
+Route::get('/subreddits/{subreddit}/provider-analytics', [ProviderAnalyticsController::class, 'show'])->name('provider-analytics.show');
 Route::get('/starred', [IdeaController::class, 'starred'])->name('ideas.starred');
 Route::get('/api/starred', [IdeaController::class, 'starredList'])->name('api.ideas.starred');
 Route::get('/ideas/{idea}', [IdeaController::class, 'show'])->name('ideas.show');

@@ -20,7 +20,10 @@ class IdeaController extends Controller
 
         $query = Idea::query()
             ->fromSubreddit($subreddit->id)
-            ->with(['post:id,reddit_id,title,permalink,upvotes,num_comments']);
+            ->with([
+                'post:id,reddit_id,title,permalink,upvotes,num_comments',
+                'post.classification:id,post_id,combined_score,final_decision,haiku_verdict,haiku_confidence,haiku_completed,gpt_verdict,gpt_confidence,gpt_completed,classified_at',
+            ]);
 
         // Apply filters
         if (isset($validated['min_score'])) {
@@ -44,6 +47,14 @@ class IdeaController extends Controller
             $query->createdBetween($validated['date_from'], $validated['date_to']);
         }
 
+        if (! empty($validated['extraction_provider'])) {
+            $query->byExtractionProvider($validated['extraction_provider']);
+        }
+
+        if (! empty($validated['classification_agreement'])) {
+            $query->byClassificationAgreement($validated['classification_agreement']);
+        }
+
         // Apply sorting
         $sortBy = $validated['sort_by'] ?? 'score_overall';
         $sortDir = $validated['sort_dir'] ?? 'desc';
@@ -52,6 +63,12 @@ class IdeaController extends Controller
         // Paginate with max limit
         $perPage = $validated['per_page'] ?? 20;
         $ideas = $query->paginate($perPage);
+
+        foreach ($ideas->items() as $idea) {
+            if ($idea->post?->classification) {
+                $idea->post->classification->append('providers_summary');
+            }
+        }
 
         return response()->json([
             'ideas' => $ideas->items(),
@@ -84,6 +101,7 @@ class IdeaController extends Controller
             ->with([
                 'post:id,reddit_id,title,permalink,upvotes,num_comments,subreddit_id',
                 'post.subreddit:id,name',
+                'post.classification:id,post_id,combined_score,final_decision,haiku_verdict,haiku_confidence,haiku_completed,gpt_verdict,gpt_confidence,gpt_completed,classified_at',
             ]);
 
         // Apply filters (same as subreddit listing)
@@ -104,6 +122,14 @@ class IdeaController extends Controller
             $query->createdBetween($validated['date_from'], $validated['date_to']);
         }
 
+        if (! empty($validated['extraction_provider'])) {
+            $query->byExtractionProvider($validated['extraction_provider']);
+        }
+
+        if (! empty($validated['classification_agreement'])) {
+            $query->byClassificationAgreement($validated['classification_agreement']);
+        }
+
         // Apply sorting
         $sortBy = $validated['sort_by'] ?? 'starred_at';
         $sortDir = $validated['sort_dir'] ?? 'desc';
@@ -111,6 +137,12 @@ class IdeaController extends Controller
 
         $perPage = $validated['per_page'] ?? 20;
         $ideas = $query->paginate($perPage);
+
+        foreach ($ideas->items() as $idea) {
+            if ($idea->post?->classification) {
+                $idea->post->classification->append('providers_summary');
+            }
+        }
 
         return response()->json([
             'ideas' => $ideas->items(),
@@ -144,8 +176,12 @@ class IdeaController extends Controller
         $idea->load([
             'post:id,reddit_id,title,body,permalink,author,upvotes,num_comments,reddit_created_at,subreddit_id',
             'post.subreddit:id,name',
-            'post.classification:post_id,haiku_category,gpt_category,final_decision,combined_score',
+            'post.classification',
         ]);
+
+        if ($idea->post?->classification) {
+            $idea->post->classification->append('providers');
+        }
 
         return response()->json([
             'idea' => $idea,

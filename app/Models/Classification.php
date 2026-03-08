@@ -199,6 +199,57 @@ class Classification extends Model
     }
 
     /**
+     * Provider column prefix to canonical config key mapping.
+     * Matches what ClassifyPostsChunkJob::storeClassification() uses.
+     */
+    private const PROVIDER_MAP = [
+        'haiku' => ['name' => 'anthropic-haiku', 'label' => 'Haiku'],
+        'gpt'   => ['name' => 'openai',           'label' => 'GPT'],
+    ];
+
+    /**
+     * Full provider output including reasoning and category (for detail views).
+     */
+    public function getProvidersAttribute(): array
+    {
+        $providers = [];
+
+        foreach (self::PROVIDER_MAP as $prefix => $meta) {
+            $providers[] = [
+                'name'       => $meta['name'],
+                'label'      => $meta['label'],
+                'verdict'    => $this->{"{$prefix}_verdict"},
+                'confidence' => $this->{"{$prefix}_confidence"},
+                'category'   => $this->{"{$prefix}_category"},
+                'reasoning'  => $this->{"{$prefix}_reasoning"},
+                'completed'  => (bool) $this->{"{$prefix}_completed"},
+            ];
+        }
+
+        return $providers;
+    }
+
+    /**
+     * Lightweight provider output without reasoning or category (for list views).
+     */
+    public function getProvidersSummaryAttribute(): array
+    {
+        $providers = [];
+
+        foreach (self::PROVIDER_MAP as $prefix => $meta) {
+            $providers[] = [
+                'name'       => $meta['name'],
+                'label'      => $meta['label'],
+                'verdict'    => $this->{"{$prefix}_verdict"},
+                'confidence' => $this->{"{$prefix}_confidence"},
+                'completed'  => (bool) $this->{"{$prefix}_completed"},
+            ];
+        }
+
+        return $providers;
+    }
+
+    /**
      * Scope for classifications that passed (keep or borderline).
      */
     public function scopePassed($query)
