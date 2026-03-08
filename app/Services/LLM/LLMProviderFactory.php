@@ -11,7 +11,7 @@ class LLMProviderFactory
      *
      * This allows jobs/services to depend on the container for testability.
      *
-     * @return array<LLMProviderInterface>
+     * @return array<string, LLMProviderInterface> Keyed by config key
      */
     public function classificationProviders(): array
     {
@@ -57,7 +57,7 @@ class LLMProviderFactory
     /**
      * Get classification providers based on config.
      *
-     * @return array<LLMProviderInterface>
+     * @return array<string, LLMProviderInterface> Keyed by config key
      * @throws InvalidArgumentException If a configured provider does not support classification
      */
     public static function getClassificationProviders(): array
@@ -68,7 +68,8 @@ class LLMProviderFactory
             throw new InvalidArgumentException("Config 'llm.classification.providers' must be an array");
         }
 
-        return array_map(function (string $name) {
+        $providers = [];
+        foreach ($providerNames as $name) {
             $provider = self::make($name);
 
             if (! $provider->supportsClassification()) {
@@ -78,8 +79,10 @@ class LLMProviderFactory
                 );
             }
 
-            return $provider;
-        }, $providerNames);
+            $providers[$name] = $provider;
+        }
+
+        return $providers;
     }
 
     /**

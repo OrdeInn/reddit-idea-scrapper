@@ -2,22 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Idea;
 use App\Models\Subreddit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
 class ProviderAnalyticsController extends Controller
 {
-    /**
-     * Provider column prefix to canonical name mapping.
-     * Matches Classification::PROVIDER_MAP.
-     */
-    private const PROVIDERS = [
-        ['prefix' => 'haiku', 'name' => 'anthropic-haiku', 'label' => 'Haiku'],
-        ['prefix' => 'gpt',   'name' => 'openai',           'label' => 'GPT'],
-    ];
-
     public function show(Subreddit $subreddit): JsonResponse
     {
         return response()->json([
@@ -28,59 +18,85 @@ class ProviderAnalyticsController extends Controller
 
     private function buildClassificationStats(int $subredditId): array
     {
-        // Use a join to avoid pulling all post IDs into PHP memory
-        $agg = DB::table('classifications')
+        // Total finalized classifications for this subreddit
+        $total = DB::table('classifications')
             ->join('posts', 'posts.id', '=', 'classifications.post_id')
             ->where('posts.subreddit_id', $subredditId)
-            ->where('classifications.haiku_completed', true)
-            ->where('classifications.gpt_completed', true)
-            ->selectRaw('
-                COUNT(*) as total_classified,
-                SUM(CASE WHEN classifications.haiku_verdict = classifications.gpt_verdict THEN 1 ELSE 0 END) as both_agree,
-                AVG(classifications.haiku_confidence) as avg_haiku_confidence,
-                AVG(classifications.gpt_confidence) as avg_gpt_confidence,
-                SUM(CASE WHEN classifications.haiku_verdict = "keep" THEN 1 ELSE 0 END) as haiku_keep,
-                SUM(CASE WHEN classifications.haiku_verdict = "skip" THEN 1 ELSE 0 END) as haiku_skip,
-                SUM(CASE WHEN classifications.gpt_verdict = "keep" THEN 1 ELSE 0 END) as gpt_keep,
-                SUM(CASE WHEN classifications.gpt_verdict = "skip" THEN 1 ELSE 0 END) as gpt_skip
-            ')
-            ->first();
-
-        $total = (int) ($agg->total_classified ?? 0);
+            ->whereNotNull('classifications.classified_at')
+            ->count();
 
         if ($total === 0) {
             return $this->emptyClassificationStats();
         }
 
-        $bothAgree = (int) ($agg->both_agree ?? 0);
+        // Agreement: only for classifications where ALL expected providers completed
+        $agreementBase = DB::table('classifications')
+            ->join('posts', 'posts.id', '=', 'classifications.post_id')
+            ->where('posts.subreddit_id', $subredditId)
+            ->whereNotNull('classifications.classified_at')
+            ->whereRaw('(SELECT COUNT(*) FROM classification_results WHERE classification_results.classification_id = classifications.id AND classification_results.completed = 1) = classifications.expected_provider_count')
+            ->whereRaw('classifications.expected_provider_count >= 2');
+
+        $agreementTotal = $agreementBase->count();
+
+        $bothAgree = 0;
+        if ($agreementTotal > 0) {
+            $bothAgree = (clone $agreementBase)
+                ->whereRaw('(SELECT COUNT(DISTINCT verdict) FROM classification_results WHERE classification_results.classification_id = classifications.id AND classification_results.completed = 1) = 1')
+                ->count();
+        }
+
+        // Per-provider stats from classification_results
+        $providerStats = DB::table('classification_results')
+            ->join('classifications', 'classifications.id', '=', 'classification_results.classification_id')
+            ->join('posts', 'posts.id', '=', 'classifications.post_id')
+            ->where('posts.subreddit_id', $subredditId)
+            ->where('classification_results.completed', true)
+            ->selectRaw('
+                classification_results.provider_name,
+                COUNT(*) as total_completed,
+                AVG(classification_results.confidence) as avg_confidence,
+                SUM(CASE WHEN classification_results.verdict = "keep" THEN 1 ELSE 0 END) as keep_count,
+                SUM(CASE WHEN classification_results.verdict = "skip" THEN 1 ELSE 0 END) as skip_count
+            ')
+            ->groupBy('classification_results.provider_name')
+            ->get()
+            ->keyBy('provider_name');
+
+        // Build provider list from union of config providers + historical providers
+        $configuredProviders = config('llm.classification.providers', []);
+        $historicalProviders = $providerStats->keys()->toArray();
+        $allProviderNames = array_unique(array_merge($configuredProviders, $historicalProviders));
+
         $providers = [];
+        foreach ($allProviderNames as $providerName) {
+            $stats = $providerStats->get($providerName);
 
-        foreach (self::PROVIDERS as $provider) {
-            $prefix = $provider['prefix'];
-
-            // Category distribution filtered to the same both-completed dataset as
-            // total_completed / avg_confidence / verdict_distribution, ensuring counts are consistent.
-            $categories = DB::table('classifications')
+            // Category distribution for this provider
+            $categories = DB::table('classification_results')
+                ->join('classifications', 'classifications.id', '=', 'classification_results.classification_id')
                 ->join('posts', 'posts.id', '=', 'classifications.post_id')
                 ->where('posts.subreddit_id', $subredditId)
-                ->where('classifications.haiku_completed', true)
-                ->where('classifications.gpt_completed', true)
-                ->whereNotNull("classifications.{$prefix}_category")
-                ->selectRaw("classifications.{$prefix}_category as category, COUNT(*) as count")
-                ->groupBy("classifications.{$prefix}_category")
+                ->where('classification_results.provider_name', $providerName)
+                ->where('classification_results.completed', true)
+                ->whereNotNull('classification_results.category')
+                ->selectRaw('classification_results.category, COUNT(*) as count')
+                ->groupBy('classification_results.category')
                 ->orderByDesc('count')
                 ->get()
                 ->mapWithKeys(fn ($row) => [$row->category => (int) $row->count])
                 ->toArray();
 
+            $label = config("llm.providers.{$providerName}.provider_name", $providerName);
+
             $providers[] = [
-                'name'  => $provider['name'],
-                'label' => $provider['label'],
-                'total_completed'      => (int) ($agg->{"{$prefix}_keep"} ?? 0) + (int) ($agg->{"{$prefix}_skip"} ?? 0),
-                'avg_confidence'       => round((float) ($agg->{"avg_{$prefix}_confidence"} ?? 0), 3),
+                'name'  => $providerName,
+                'label' => $label,
+                'total_completed'      => $stats ? (int) $stats->total_completed : 0,
+                'avg_confidence'       => $stats ? round((float) $stats->avg_confidence, 3) : 0.0,
                 'verdict_distribution' => [
-                    'keep' => (int) ($agg->{"{$prefix}_keep"} ?? 0),
-                    'skip' => (int) ($agg->{"{$prefix}_skip"} ?? 0),
+                    'keep' => $stats ? (int) $stats->keep_count : 0,
+                    'skip' => $stats ? (int) $stats->skip_count : 0,
                 ],
                 'category_distribution' => $categories,
             ];
@@ -90,8 +106,8 @@ class ProviderAnalyticsController extends Controller
             'total_classified' => $total,
             'agreement' => [
                 'both_agree'     => $bothAgree,
-                'both_disagree'  => $total - $bothAgree,
-                'agreement_rate' => round($bothAgree / $total, 3),
+                'both_disagree'  => $agreementTotal - $bothAgree,
+                'agreement_rate' => $agreementTotal > 0 ? round($bothAgree / $agreementTotal, 3) : 0.0,
             ],
             'providers' => $providers,
         ];
@@ -117,14 +133,15 @@ class ProviderAnalyticsController extends Controller
 
     private function emptyClassificationStats(): array
     {
-        $providers = array_map(fn ($p) => [
-            'name'  => $p['name'],
-            'label' => $p['label'],
+        $configuredProviders = config('llm.classification.providers', []);
+        $providers = array_map(fn ($name) => [
+            'name'  => $name,
+            'label' => config("llm.providers.{$name}.provider_name", $name),
             'total_completed'       => 0,
             'avg_confidence'        => 0.0,
             'verdict_distribution'  => ['keep' => 0, 'skip' => 0],
             'category_distribution' => [],
-        ], self::PROVIDERS);
+        ], $configuredProviders);
 
         return [
             'total_classified' => 0,

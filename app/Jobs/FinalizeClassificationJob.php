@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Classification;
+use App\Models\ClassificationResult;
 use App\Models\Scan;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -85,31 +86,44 @@ class FinalizeClassificationJob implements ShouldQueue
             ->whereDoesntHave('classification', fn ($q) => $q->whereNotNull('classified_at'))
             ->get();
 
+        $configuredProviders = config('llm.classification.providers', []);
         $gapFilled = 0;
 
         foreach ($unclassifiedPosts as $post) {
-            // Use updateOrCreate to handle both cases:
+            // Handle both cases:
             // - Post has NO classification row → creates new discard record
             // - Post has INCOMPLETE classification row (classified_at=null) → updates to discard
-            // This respects the unique('post_id') constraint on the classifications table
-            Classification::updateOrCreate(
-                ['post_id' => $post->id],
-                [
-                    'haiku_verdict' => 'skip',
-                    'haiku_confidence' => 0.0,
-                    'haiku_category' => 'finalization-gap-fill',
-                    'haiku_reasoning' => 'Post was not classified before finalization',
-                    'haiku_completed' => false,
-                    'gpt_verdict' => 'skip',
-                    'gpt_confidence' => 0.0,
-                    'gpt_category' => 'finalization-gap-fill',
-                    'gpt_reasoning' => 'Post was not classified before finalization',
-                    'gpt_completed' => false,
+            $existingClassification = Classification::where('post_id', $post->id)->first();
+
+            if ($existingClassification) {
+                $existingClassification->update([
                     'final_decision' => Classification::DECISION_DISCARD,
                     'combined_score' => 0.0,
                     'classified_at' => now(),
-                ]
-            );
+                ]);
+                $classification = $existingClassification;
+            } else {
+                $classification = Classification::create([
+                    'post_id' => $post->id,
+                    'final_decision' => Classification::DECISION_DISCARD,
+                    'combined_score' => 0.0,
+                    'expected_provider_count' => count($configuredProviders),
+                    'classified_at' => now(),
+                ]);
+            }
+
+            foreach ($configuredProviders as $providerName) {
+                ClassificationResult::firstOrCreate(
+                    ['classification_id' => $classification->id, 'provider_name' => $providerName],
+                    [
+                        'verdict' => 'skip',
+                        'confidence' => 0.0,
+                        'category' => 'finalization-gap-fill',
+                        'reasoning' => 'Post was not classified before finalization',
+                        'completed' => false,
+                    ]
+                );
+            }
 
             $gapFilled++;
         }

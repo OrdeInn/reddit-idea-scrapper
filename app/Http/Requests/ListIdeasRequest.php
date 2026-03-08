@@ -33,7 +33,11 @@ class ListIdeasRequest extends FormRequest
             'sort_dir' => ['nullable', 'string', Rule::in(['asc', 'desc'])],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
             'extraction_provider' => ['nullable', 'string', 'max:50'],
-            'classification_agreement' => ['nullable', 'string', Rule::in(['all_agree', 'all_disagree', 'haiku_only_keep', 'gpt_only_keep'])],
+            'classification_agreement' => ['nullable', 'string', Rule::in([
+                'all_agree', 'any_disagree',
+                // Legacy aliases (backward compat — still accepted, mapped in Idea scope)
+                'all_disagree', 'haiku_only_keep', 'gpt_only_keep',
+            ])],
         ];
     }
 

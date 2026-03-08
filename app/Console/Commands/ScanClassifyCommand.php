@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Classification;
+use App\Models\ClassificationResult;
 use App\Models\Post;
 use App\Models\Scan;
 use App\Services\LLM\DTOs\ClassificationRequest;
@@ -68,7 +69,7 @@ class ScanClassifyCommand extends Command
                 return self::SUCCESS;
             }
 
-            // Get providers based on option
+            // Get providers based on option — returns [config_key => provider] keyed array
             $providers = $this->getProviders($factory, $provider);
 
             $this->info("Classifying {$posts->count()} posts using {$provider} provider(s)...");
@@ -98,14 +99,14 @@ class ScanClassifyCommand extends Command
                         continue;
                     }
 
-                    // Classify the post
+                    // Classify the post — results keyed by config key
                     $classificationResults = $this->classifyPost($post, $providers);
 
                     // Store and finalize classification (or simulate in dry-run)
                     $classification = null;
                     if ($dryRun) {
                         // In dry-run, simulate the classification without touching the database
-                        $classification = $this->createSimulatedClassification($post, $classificationResults);
+                        $classification = $this->createSimulatedClassification($post, $classificationResults, count($providers));
                         // Do NOT delete incomplete classifications in dry-run
                     } else {
                         // Clean up incomplete classifications before processing
@@ -113,8 +114,8 @@ class ScanClassifyCommand extends Command
                             ->whereNull('classified_at')
                             ->delete();
 
-                        $classification = DB::transaction(function () use ($post, $classificationResults, $scan, $isScanMode) {
-                            $classification = $this->storeClassification($post, $classificationResults);
+                        $classification = DB::transaction(function () use ($post, $classificationResults, $providers, $scan, $isScanMode) {
+                            $classification = $this->storeClassification($post, $classificationResults, count($providers));
                             $this->processAndFinalizeClassification($classification, $classificationResults);
 
                             // Update scan counter in scan mode only
@@ -135,6 +136,7 @@ class ScanClassifyCommand extends Command
                             'keep' => $results['kept']++,
                             'discard' => $results['discarded']++,
                             'borderline' => $results['borderline']++,
+                            default => null,
                         };
                     }
                 } catch (\Exception $e) {
@@ -221,27 +223,32 @@ class ScanClassifyCommand extends Command
 
     /**
      * Get providers based on provider option.
+     * Returns [config_key => provider] keyed associative array.
      *
-     * @return array<LLMProviderInterface>
+     * @return array<string, LLMProviderInterface>
      */
     private function getProviders(LLMProviderFactory $factory, string $provider): array
     {
         return match ($provider) {
-            'gpt' => [LLMProviderFactory::make('openai-gpt5-mini')],
+            'gpt' => ['openai-gpt5-mini' => LLMProviderFactory::make('openai-gpt5-mini')],
             'both' => $factory->classificationProviders(),
         };
     }
 
     /**
-     * Classify a single post.
+     * Classify a single post using all providers.
+     * Returns results keyed by provider config key.
+     *
+     * @param array<string, LLMProviderInterface> $providers
+     * @return array<string, array{response: mixed, completed: bool, error: ?string}>
      */
     private function classifyPost(Post $post, array $providers): array
     {
         $request = ClassificationRequest::fromPost($post);
         $results = [];
 
-        foreach ($providers as $provider) {
-            $results[$provider->getProviderName()] = $this->runProvider($provider, $request);
+        foreach ($providers as $configKey => $provider) {
+            $results[$configKey] = $this->runProvider($provider, $request, $configKey);
         }
 
         return $results;
@@ -250,7 +257,7 @@ class ScanClassifyCommand extends Command
     /**
      * Run a single provider and return response data.
      */
-    private function runProvider(LLMProviderInterface $provider, ClassificationRequest $request): array
+    private function runProvider(LLMProviderInterface $provider, ClassificationRequest $request, string $configKey): array
     {
         try {
             $response = $provider->classify($request);
@@ -262,7 +269,7 @@ class ScanClassifyCommand extends Command
             ];
         } catch (\Exception $e) {
             Log::warning('Provider classification failed', [
-                'provider' => $provider->getProviderName(),
+                'provider' => $configKey,
                 'error' => $e->getMessage(),
             ]);
 
@@ -275,53 +282,54 @@ class ScanClassifyCommand extends Command
     }
 
     /**
-     * Store classification record.
+     * Store classification record in the new generic schema.
+     * Creates one Classification + one ClassificationResult per provider.
      */
-    private function storeClassification(Post $post, array $results): Classification
+    private function storeClassification(Post $post, array $results, int $expectedProviderCount): Classification
     {
-        $data = ['post_id' => $post->id];
+        $classification = Classification::create([
+            'post_id' => $post->id,
+            'expected_provider_count' => $expectedProviderCount,
+        ]);
 
-        foreach ($results as $providerName => $result) {
+        foreach ($results as $configKey => $result) {
             $response = $result['response'];
             $completed = $result['completed'];
 
-            // Map provider name to column prefix
-            $prefix = match ($providerName) {
-                'anthropic-haiku' => 'haiku',
-                'openai' => 'gpt',
-                default => throw new \RuntimeException("Unknown LLM provider: {$providerName}"),
-            };
-
-            if ($response) {
-                $data["{$prefix}_verdict"] = $response->verdict;
-                $data["{$prefix}_confidence"] = $response->confidence;
-                $data["{$prefix}_category"] = $response->category;
-                $data["{$prefix}_reasoning"] = $response->reasoning;
-            }
-            $data["{$prefix}_completed"] = $completed;
+            ClassificationResult::create([
+                'classification_id' => $classification->id,
+                'provider_name' => $configKey,
+                'verdict' => $response?->verdict,
+                'confidence' => $response?->confidence,
+                'category' => $response?->category,
+                'reasoning' => $response?->reasoning,
+                'completed' => $completed,
+                'completed_at' => $completed ? now() : null,
+            ]);
         }
 
-        return Classification::create($data);
+        $classification->load('results');
+
+        return $classification;
     }
 
     /**
-     * Process and finalize classification.
+     * Process and finalize classification using generic N-provider logic.
      */
     private function processAndFinalizeClassification(Classification $classification, array $results): void
     {
-        $haikuCompleted = $results['anthropic-haiku']['completed'] ?? false;
-        $gptCompleted = $results['openai']['completed'] ?? false;
-        $numProvidersRequested = count($results);
+        $completedCount = count(array_filter($results, fn ($r) => $r['completed']));
+        $totalCount = count($results);
 
-        // Case 1: Both providers completed - use consensus logic
-        if ($haikuCompleted && $gptCompleted) {
+        // All providers completed — use consensus via model method
+        if ($completedCount === $totalCount) {
             $classification->processResults();
 
             return;
         }
 
-        // Case 2: Both failed
-        if (! $haikuCompleted && ! $gptCompleted) {
+        // All failed — discard
+        if ($completedCount === 0) {
             $classification->final_decision = Classification::DECISION_DISCARD;
             $classification->combined_score = 0.0;
             $classification->classified_at = now();
@@ -330,167 +338,87 @@ class ScanClassifyCommand extends Command
             return;
         }
 
-        // Case 3: Single provider succeeded - use direct verdict
-        $confidenceThreshold = 0.7;
+        // Partial completion — fallback using same formula as full consensus
+        $completedResults = collect($results)->filter(fn ($r) => $r['completed']);
+        $sum = $completedResults->sum(
+            fn ($r) => ($r['response']?->confidence ?? 0.0) * ($r['response']?->verdict === 'keep' ? 1 : 0)
+        );
+        $combinedScore = $sum / $classification->expected_provider_count;
 
-        if ($haikuCompleted && ! $gptCompleted) {
-            $verdict = $results['anthropic-haiku']['response']->verdict;
-            $confidence = $results['anthropic-haiku']['response']->confidence;
+        $keepThreshold = (float) config('llm.classification.consensus_threshold_keep', 0.6);
+        $discardThreshold = (float) config('llm.classification.consensus_threshold_discard', 0.4);
 
-            // Single provider mode: direct verdict, not reduced confidence
-            if ($numProvidersRequested === 1) {
-                $classification->final_decision = Classification::determineFinalDecision(
-                    $confidence * ($verdict === 'keep' ? 1 : 0)
-                );
-                $classification->combined_score = $verdict === 'keep' ? $confidence : 0.0;
-            } else {
-                // Partial failure: use confidence threshold for decision (no penalty)
-                if ($verdict === 'keep') {
-                    $classification->final_decision = $confidence >= $confidenceThreshold
-                        ? Classification::DECISION_KEEP
-                        : Classification::DECISION_BORDERLINE;
-                    $classification->combined_score = $confidence;
-                } else {
-                    $classification->final_decision = Classification::DECISION_DISCARD;
-                    $classification->combined_score = 0.0;
-                }
-            }
-        } elseif ($gptCompleted && ! $haikuCompleted) {
-            $verdict = $results['openai']['response']->verdict;
-            $confidence = $results['openai']['response']->confidence;
-
-            // Single provider mode: direct verdict, not reduced confidence
-            if ($numProvidersRequested === 1) {
-                $classification->final_decision = Classification::determineFinalDecision(
-                    $confidence * ($verdict === 'keep' ? 1 : 0)
-                );
-                $classification->combined_score = $verdict === 'keep' ? $confidence : 0.0;
-            } else {
-                // Partial failure: use confidence threshold for decision (no penalty)
-                if ($verdict === 'keep') {
-                    $classification->final_decision = $confidence >= $confidenceThreshold
-                        ? Classification::DECISION_KEEP
-                        : Classification::DECISION_BORDERLINE;
-                    $classification->combined_score = $confidence;
-                } else {
-                    $classification->final_decision = Classification::DECISION_DISCARD;
-                    $classification->combined_score = 0.0;
-                }
-            }
-        }
-
+        $classification->combined_score = $combinedScore;
+        $classification->final_decision = Classification::determineFinalDecision($combinedScore, $keepThreshold, $discardThreshold);
         $classification->classified_at = now();
         $classification->save();
     }
 
     /**
      * Create a simulated classification for dry-run mode.
-     * This calculates the final decision without persisting to database.
-     * Reuses the decision logic from processAndFinalizeClassification but without saving.
+     * Calculates the final decision without persisting to database.
      */
-    private function createSimulatedClassification(Post $post, array $results): Classification
+    private function createSimulatedClassification(Post $post, array $results, int $expectedProviderCount): Classification
     {
-        $haikuCompleted = $results['anthropic-haiku']['completed'] ?? false;
-        $gptCompleted = $results['openai']['completed'] ?? false;
-        $numProvidersRequested = count($results);
+        $completedCount = count(array_filter($results, fn ($r) => $r['completed']));
+        $totalCount = count($results);
 
-        // Build a temporary classification object (not saved)
         $classification = new Classification([
             'post_id' => $post->id,
+            'expected_provider_count' => $expectedProviderCount,
         ]);
 
-        // Populate provider data
-        foreach ($results as $providerName => $result) {
-            $response = $result['response'];
-            $completed = $result['completed'];
+        if ($completedCount === 0) {
+            $classification->final_decision = Classification::DECISION_DISCARD;
+            $classification->combined_score = 0.0;
+            $classification->classified_at = now();
 
-            $prefix = match ($providerName) {
-                'anthropic-haiku' => 'haiku',
-                'openai' => 'gpt',
-                default => throw new \RuntimeException("Unknown LLM provider: {$providerName}"),
-            };
-
-            if ($response) {
-                $classification->{"{$prefix}_verdict"} = $response->verdict;
-                $classification->{"{$prefix}_confidence"} = $response->confidence;
-                $classification->{"{$prefix}_category"} = $response->category;
-                $classification->{"{$prefix}_reasoning"} = $response->reasoning;
-            }
-            $classification->{"{$prefix}_completed"} = $completed;
+            return $classification;
         }
 
-        // Calculate final decision - use same logic as processAndFinalizeClassification but without DB calls
-        $confidenceThreshold = 0.7;
+        // Build a temporary results collection to use the static consensus methods
+        $resultModels = collect();
+        foreach ($results as $configKey => $result) {
+            if (! $result['completed'] || ! $result['response']) {
+                continue;
+            }
+            $model = new ClassificationResult([
+                'provider_name' => $configKey,
+                'verdict' => $result['response']->verdict,
+                'confidence' => $result['response']->confidence,
+                'completed' => true,
+            ]);
+            $resultModels->push($model);
+        }
 
-        if ($haikuCompleted && $gptCompleted) {
-            // Both providers succeeded - use consensus logic (mimic what processResults() does without saving)
-            $shortcutDecision = Classification::checkShortcutRule(
-                $classification->haiku_verdict,
-                $classification->haiku_confidence,
-                $classification->gpt_verdict,
-                $classification->gpt_confidence
-            );
+        if ($completedCount === $totalCount) {
+            // All completed — use full consensus logic
+            $threshold = (float) config('llm.classification.shortcut_confidence', 0.8);
+            $shortcutDecision = Classification::checkShortcutRule($resultModels, $threshold);
 
             if ($shortcutDecision !== null) {
                 $classification->combined_score = $shortcutDecision === Classification::DECISION_KEEP ? 1.0 : 0.0;
                 $classification->final_decision = $shortcutDecision;
             } else {
-                $classification->combined_score = Classification::calculateConsensusScore(
-                    $classification->haiku_verdict,
-                    $classification->haiku_confidence,
-                    $classification->gpt_verdict,
-                    $classification->gpt_confidence
-                );
-                $classification->final_decision = Classification::determineFinalDecision($classification->combined_score);
-            }
-        } elseif (! $haikuCompleted && ! $gptCompleted) {
-            // Both failed
-            $classification->final_decision = Classification::DECISION_DISCARD;
-            $classification->combined_score = 0.0;
-        } elseif ($haikuCompleted && ! $gptCompleted) {
-            // Only Haiku succeeded
-            $verdict = $results['anthropic-haiku']['response']->verdict;
-            $confidence = $results['anthropic-haiku']['response']->confidence;
-
-            if ($numProvidersRequested === 1) {
+                $classification->combined_score = Classification::calculateConsensusScore($resultModels);
+                $keepThreshold = (float) config('llm.classification.consensus_threshold_keep', 0.6);
+                $discardThreshold = (float) config('llm.classification.consensus_threshold_discard', 0.4);
                 $classification->final_decision = Classification::determineFinalDecision(
-                    $confidence * ($verdict === 'keep' ? 1 : 0)
+                    $classification->combined_score, $keepThreshold, $discardThreshold
                 );
-                $classification->combined_score = $verdict === 'keep' ? $confidence : 0.0;
-            } else {
-                // Partial failure: use confidence threshold for decision (no penalty)
-                if ($verdict === 'keep') {
-                    $classification->final_decision = $confidence >= $confidenceThreshold
-                        ? Classification::DECISION_KEEP
-                        : Classification::DECISION_BORDERLINE;
-                    $classification->combined_score = $confidence;
-                } else {
-                    $classification->final_decision = Classification::DECISION_DISCARD;
-                    $classification->combined_score = 0.0;
-                }
             }
-        } elseif ($gptCompleted && ! $haikuCompleted) {
-            // Only GPT succeeded
-            $verdict = $results['openai']['response']->verdict;
-            $confidence = $results['openai']['response']->confidence;
+        } else {
+            // Partial completion — fallback with penalized score
+            $sum = $resultModels->sum(
+                fn ($r) => ($r->confidence ?? 0.0) * ($r->verdict === 'keep' ? 1 : 0)
+            );
+            $combinedScore = $sum / $expectedProviderCount;
 
-            if ($numProvidersRequested === 1) {
-                $classification->final_decision = Classification::determineFinalDecision(
-                    $confidence * ($verdict === 'keep' ? 1 : 0)
-                );
-                $classification->combined_score = $verdict === 'keep' ? $confidence : 0.0;
-            } else {
-                // Partial failure: use confidence threshold for decision (no penalty)
-                if ($verdict === 'keep') {
-                    $classification->final_decision = $confidence >= $confidenceThreshold
-                        ? Classification::DECISION_KEEP
-                        : Classification::DECISION_BORDERLINE;
-                    $classification->combined_score = $confidence;
-                } else {
-                    $classification->final_decision = Classification::DECISION_DISCARD;
-                    $classification->combined_score = 0.0;
-                }
-            }
+            $keepThreshold = (float) config('llm.classification.consensus_threshold_keep', 0.6);
+            $discardThreshold = (float) config('llm.classification.consensus_threshold_discard', 0.4);
+
+            $classification->combined_score = $combinedScore;
+            $classification->final_decision = Classification::determineFinalDecision($combinedScore, $keepThreshold, $discardThreshold);
         }
 
         $classification->classified_at = now();
@@ -530,13 +458,10 @@ class ScanClassifyCommand extends Command
         $this->line("  <fg=gray>{$post->reddit_url}</>");
 
         // Display providers' responses
-        foreach ($results as $providerName => $result) {
-            // Map provider names to user-friendly display names
-            $displayName = match ($providerName) {
-                'anthropic-haiku' => 'Haiku',
-                'openai' => 'GPT',
-                default => $providerName,
-            };
+        foreach ($results as $configKey => $result) {
+            // Use config key as display name (title-case the last segment)
+            $segments = explode('-', $configKey);
+            $displayName = implode(' ', array_map('ucfirst', $segments));
 
             if (! isset($result['response']) || ! $result['response']) {
                 $this->line("  <fg=yellow>⚠</> {$displayName}: Failed");

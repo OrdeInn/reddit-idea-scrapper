@@ -86,13 +86,36 @@ const confidenceBarColor = (val) => {
     return 'from-red-400 to-red-500'
 }
 
-const PROVIDER_COLORS = {
+const PROVIDER_BORDER_COLORS = {
     'anthropic-haiku': 'border-purple-400 dark:border-purple-600',
     'anthropic-sonnet': 'border-amber-400 dark:border-amber-600',
-    'openai': 'border-emerald-400 dark:border-emerald-600',
+    'anthropic-opus': 'border-red-400 dark:border-red-600',
+    'openai-gpt5-mini': 'border-emerald-400 dark:border-emerald-600',
+    'openai-gpt5-2': 'border-green-400 dark:border-green-600',
 }
 
-const providerTopBorder = (name) => PROVIDER_COLORS[name] ?? 'border-border-default'
+// Pre-defined border palette for auto-color assignment — full literal strings required for Tailwind JIT.
+const AUTO_BORDER_PALETTE = [
+    'border-blue-400 dark:border-blue-600',
+    'border-rose-400 dark:border-rose-600',
+    'border-cyan-400 dark:border-cyan-600',
+    'border-orange-400 dark:border-orange-600',
+    'border-indigo-400 dark:border-indigo-600',
+    'border-teal-400 dark:border-teal-600',
+    'border-pink-400 dark:border-pink-600',
+    'border-lime-400 dark:border-lime-600',
+]
+
+const hashProvider = (name) => {
+    let hash = 0
+    for (let i = 0; i < name.length; i++) hash += name.charCodeAt(i)
+    return hash % AUTO_BORDER_PALETTE.length
+}
+
+const providerTopBorder = (name) => {
+    if (!name) return 'border-border-default'
+    return PROVIDER_BORDER_COLORS[name] ?? AUTO_BORDER_PALETTE[hashProvider(name)]
+}
 
 const verdictClasses = (verdict) => verdict === 'keep'
     ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'

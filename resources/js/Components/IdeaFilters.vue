@@ -58,7 +58,7 @@ const isScore4Active = computed(() => localFilters.value.min_score >= 4)
 const isScore3Active = computed(() => localFilters.value.min_score === 3)
 const isStarredActive = computed(() => localFilters.value.starred_only === true)
 const isEasyBuildActive = computed(() => localFilters.value.min_complexity >= 3)
-const isDisagreementsActive = computed(() => localFilters.value.classification_agreement === 'all_disagree')
+const isDisagreementsActive = computed(() => localFilters.value.classification_agreement === 'any_disagree')
 
 const handleFilterChange = (updates) => {
     localFilters.value = { ...localFilters.value, ...updates }
@@ -82,7 +82,7 @@ const toggleEasyBuild = () => {
 }
 
 const toggleDisagreements = () => {
-    handleFilterChange({ classification_agreement: isDisagreementsActive.value ? '' : 'all_disagree' })
+    handleFilterChange({ classification_agreement: isDisagreementsActive.value ? '' : 'any_disagree' })
 }
 
 const toggleSortDir = () => {
@@ -287,10 +287,8 @@ const clearAllFilters = () => {
                             class="w-full px-3 py-2 text-sm border border-border-default rounded-lg bg-surface-secondary text-content-primary focus:outline-none focus:border-brand-500"
                         >
                             <option value="">Any</option>
-                            <option value="all_agree">Both Agree</option>
-                            <option value="all_disagree">Any Disagreement</option>
-                            <option value="haiku_only_keep">Haiku Keep, GPT Skip</option>
-                            <option value="gpt_only_keep">GPT Keep, Haiku Skip</option>
+                            <option value="all_agree">All Agree</option>
+                            <option value="any_disagree">Any Disagreement</option>
                         </select>
                     </div>
                 </div>

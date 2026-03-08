@@ -22,7 +22,8 @@ class IdeaController extends Controller
             ->fromSubreddit($subreddit->id)
             ->with([
                 'post:id,reddit_id,title,permalink,upvotes,num_comments',
-                'post.classification:id,post_id,combined_score,final_decision,haiku_verdict,haiku_confidence,haiku_completed,gpt_verdict,gpt_confidence,gpt_completed,classified_at',
+                'post.classification:id,post_id,combined_score,final_decision,expected_provider_count,classified_at',
+                'post.classification.results:id,classification_id,provider_name,verdict,confidence,completed',
             ]);
 
         // Apply filters
@@ -101,7 +102,8 @@ class IdeaController extends Controller
             ->with([
                 'post:id,reddit_id,title,permalink,upvotes,num_comments,subreddit_id',
                 'post.subreddit:id,name',
-                'post.classification:id,post_id,combined_score,final_decision,haiku_verdict,haiku_confidence,haiku_completed,gpt_verdict,gpt_confidence,gpt_completed,classified_at',
+                'post.classification:id,post_id,combined_score,final_decision,expected_provider_count,classified_at',
+                'post.classification.results:id,classification_id,provider_name,verdict,confidence,completed',
             ]);
 
         // Apply filters (same as subreddit listing)
@@ -177,6 +179,7 @@ class IdeaController extends Controller
             'post:id,reddit_id,title,body,permalink,author,upvotes,num_comments,reddit_created_at,subreddit_id',
             'post.subreddit:id,name',
             'post.classification',
+            'post.classification.results',
         ]);
 
         if ($idea->post?->classification) {

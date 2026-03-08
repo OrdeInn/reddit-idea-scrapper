@@ -240,20 +240,66 @@ class Idea extends Model
 
     /**
      * Scope for ideas filtered by classification provider agreement pattern.
-     * Only considers classifications where both providers have completed.
+     * Only considers classifications where all expected providers have completed.
      */
-    public function scopeByClassificationAgreement(Builder $query, string $agreementType)
+    public function scopeByClassificationAgreement(Builder $query, string $agreementType): Builder
     {
-        return $query->whereHas('post.classification', function ($q) use ($agreementType) {
-            $q->where('haiku_completed', true)->where('gpt_completed', true);
+        // Backward compat aliases
+        $agreementType = match ($agreementType) {
+            'all_disagree'    => 'any_disagree',
+            'haiku_only_keep' => 'provider_keep:anthropic-haiku',
+            'gpt_only_keep'   => 'provider_keep:openai-gpt5-mini',
+            default           => $agreementType,
+        };
 
-            match ($agreementType) {
-                'all_agree'       => $q->whereColumn('haiku_verdict', 'gpt_verdict'),
-                'all_disagree'    => $q->whereColumn('haiku_verdict', '!=', 'gpt_verdict'),
-                'haiku_only_keep' => $q->where('haiku_verdict', 'keep')->where('gpt_verdict', 'skip'),
-                'gpt_only_keep'   => $q->where('gpt_verdict', 'keep')->where('haiku_verdict', 'skip'),
-            };
-        });
+        if ($agreementType === 'all_agree') {
+            return $query->whereHas('post', function ($q) {
+                $q->whereHas('classification', function ($cq) {
+                    $cq->where('expected_provider_count', '>=', 2)
+                       ->whereRaw('(
+                           SELECT COUNT(*) FROM classification_results
+                           WHERE classification_results.classification_id = classifications.id
+                           AND classification_results.completed = 1
+                       ) = classifications.expected_provider_count')
+                       ->whereRaw('(
+                           SELECT COUNT(DISTINCT verdict) FROM classification_results
+                           WHERE classification_results.classification_id = classifications.id
+                           AND classification_results.completed = 1
+                       ) = 1');
+                });
+            });
+        }
+
+        if ($agreementType === 'any_disagree') {
+            return $query->whereHas('post', function ($q) {
+                $q->whereHas('classification', function ($cq) {
+                    $cq->where('expected_provider_count', '>=', 2)
+                       ->whereRaw('(
+                           SELECT COUNT(*) FROM classification_results
+                           WHERE classification_results.classification_id = classifications.id
+                           AND classification_results.completed = 1
+                       ) = classifications.expected_provider_count')
+                       ->whereRaw('(
+                           SELECT COUNT(DISTINCT verdict) FROM classification_results
+                           WHERE classification_results.classification_id = classifications.id
+                           AND classification_results.completed = 1
+                       ) > 1');
+                });
+            });
+        }
+
+        if (str_starts_with($agreementType, 'provider_keep:')) {
+            $providerName = substr($agreementType, strlen('provider_keep:'));
+            return $query->whereHas('post', function ($q) use ($providerName) {
+                $q->whereHas('classification.results', function ($rq) use ($providerName) {
+                    $rq->where('provider_name', $providerName)
+                       ->where('verdict', 'keep')
+                       ->where('completed', true);
+                });
+            });
+        }
+
+        return $query; // Unknown value: ignore
     }
 
     /**

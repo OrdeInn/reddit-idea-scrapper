@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Exceptions\PermanentClassificationException;
 use App\Exceptions\TransientClassificationException;
 use App\Models\Classification;
+use App\Models\ClassificationResult;
 use App\Models\Post;
 use App\Models\Scan;
 use App\Services\LLM\DTOs\ClassificationRequest;
@@ -187,26 +188,39 @@ class ClassifyPostsChunkJob implements ShouldQueue
                             return;
                         }
 
-                        $discardData = [
-                            'haiku_verdict' => 'skip',
-                            'haiku_confidence' => 0.0,
-                            'haiku_category' => 'chunk-job-failed',
-                            'haiku_reasoning' => 'Classification chunk job failed after retries',
-                            'haiku_completed' => false,
-                            'gpt_verdict' => 'skip',
-                            'gpt_confidence' => 0.0,
-                            'gpt_category' => 'chunk-job-failed',
-                            'gpt_reasoning' => 'Classification chunk job failed after retries',
-                            'gpt_completed' => false,
-                            'final_decision' => Classification::DECISION_DISCARD,
-                            'combined_score' => 0.0,
-                            'classified_at' => now(),
-                        ];
+                        $configuredProviders = config('llm.classification.providers', []);
 
                         if ($existing) {
-                            $existing->update($discardData);
+                            $existing->update([
+                                'final_decision' => Classification::DECISION_DISCARD,
+                                'combined_score' => 0.0,
+                                'classified_at' => now(),
+                            ]);
+                            $classification = $existing;
                         } else {
-                            Classification::create(array_merge($discardData, ['post_id' => $post->id]));
+                            $classification = Classification::create([
+                                'post_id' => $post->id,
+                                'final_decision' => Classification::DECISION_DISCARD,
+                                'combined_score' => 0.0,
+                                'expected_provider_count' => count($configuredProviders),
+                                'classified_at' => now(),
+                            ]);
+                        }
+
+                        foreach ($configuredProviders as $providerName) {
+                            ClassificationResult::firstOrCreate(
+                                [
+                                    'classification_id' => $classification->id,
+                                    'provider_name' => $providerName,
+                                ],
+                                [
+                                    'verdict' => 'skip',
+                                    'confidence' => 0.0,
+                                    'category' => 'chunk-job-failed',
+                                    'reasoning' => 'Classification chunk job failed after retries',
+                                    'completed' => false,
+                                ]
+                            );
                         }
 
                         $scan->increment('posts_classified');
@@ -223,11 +237,11 @@ class ClassifyPostsChunkJob implements ShouldQueue
     }
 
     /**
-     * Run dual-provider classification for one post with per-post retry loop.
+     * Run classification for one post with per-post retry loop.
      *
      * @param Post $post
      * @param Scan $scan
-     * @param array $providers
+     * @param array<string, \App\Services\LLM\LLMProviderInterface> $providers Keyed by config key
      * @param int $maxAttempts
      * @throws Throwable When all retry attempts are exhausted
      */
@@ -279,7 +293,7 @@ class ClassifyPostsChunkJob implements ShouldQueue
     /**
      * Run all classification providers in parallel and collect results.
      *
-     * @param array $providers
+     * @param array<string, \App\Services\LLM\LLMProviderInterface> $providers Keyed by config key
      * @param ClassificationRequest $request
      * @return array<string, array{response: ?ClassificationResponse, completed: bool, error: ?string}>
      */
@@ -287,20 +301,18 @@ class ClassifyPostsChunkJob implements ShouldQueue
     {
         $tasks = [];
 
-        foreach ($providers as $provider) {
-            $providerName = $provider->getProviderName();
-
-            $tasks[$providerName] = function () use ($provider, $request, $providerName) {
+        foreach ($providers as $configKey => $provider) {
+            $tasks[$configKey] = function () use ($provider, $request, $configKey) {
                 try {
                     Log::debug('Running classification provider', [
-                        'provider' => $providerName,
+                        'config_key' => $configKey,
                         'model' => $provider->getModelName(),
                     ]);
 
                     $response = $provider->classify($request);
 
                     Log::debug('Provider classification complete', [
-                        'provider' => $providerName,
+                        'config_key' => $configKey,
                         'verdict' => $response->verdict,
                         'confidence' => $response->confidence,
                     ]);
@@ -312,7 +324,7 @@ class ClassifyPostsChunkJob implements ShouldQueue
                     ];
                 } catch (TransientClassificationException $e) {
                     Log::warning('Transient provider error', [
-                        'provider' => $providerName,
+                        'config_key' => $configKey,
                         'error' => $e->getMessage(),
                     ]);
 
@@ -329,7 +341,7 @@ class ClassifyPostsChunkJob implements ShouldQueue
                     ];
                 } catch (PermanentClassificationException $e) {
                     Log::error('Permanent provider error', [
-                        'provider' => $providerName,
+                        'config_key' => $configKey,
                         'error' => $e->getMessage(),
                     ]);
 
@@ -346,7 +358,7 @@ class ClassifyPostsChunkJob implements ShouldQueue
                     ];
                 } catch (Throwable $e) {
                     Log::error('Unknown provider error', [
-                        'provider' => $providerName,
+                        'config_key' => $configKey,
                         'error' => $e->getMessage(),
                         'exception_class' => get_class($e),
                     ]);
@@ -373,33 +385,34 @@ class ClassifyPostsChunkJob implements ShouldQueue
      * Store classification results in the database.
      *
      * @param Post $post
-     * @param array<string, array{response: ?ClassificationResponse, completed: bool}> $results
+     * @param array<string, array{response: ?ClassificationResponse, completed: bool}> $results Keyed by config key
      * @return Classification
      */
     private function storeClassification(Post $post, array $results): Classification
     {
-        $data = [
+        $classification = Classification::create([
             'post_id' => $post->id,
-        ];
+            'expected_provider_count' => count(config('llm.classification.providers', [])),
+        ]);
 
-        foreach ($results as $providerName => $result) {
+        foreach ($results as $configKey => $result) {
             $response = $result['response'];
             $completed = $result['completed'];
 
-            $prefix = match ($providerName) {
-                'anthropic-haiku' => 'haiku',
-                'openai' => 'gpt',
-                default => throw new RuntimeException("Unknown provider: {$providerName}"),
-            };
-
-            $data["{$prefix}_verdict"] = $response->verdict;
-            $data["{$prefix}_confidence"] = $response->confidence;
-            $data["{$prefix}_category"] = $response->category;
-            $data["{$prefix}_reasoning"] = $response->reasoning;
-            $data["{$prefix}_completed"] = $completed;
+            ClassificationResult::create([
+                'classification_id' => $classification->id,
+                'provider_name' => $configKey,
+                'verdict' => $response->verdict,
+                'confidence' => $response->confidence,
+                'category' => $response->category,
+                'reasoning' => $response->reasoning,
+                'completed' => $completed,
+                'completed_at' => $completed ? now() : null,
+            ]);
         }
 
-        $classification = Classification::create($data);
+        // Load results relationship after creating
+        $classification->load('results');
 
         Log::debug('Classification record created', [
             'classification_id' => $classification->id,
@@ -414,7 +427,7 @@ class ClassifyPostsChunkJob implements ShouldQueue
      * Handles per-post retry logic using attempt context instead of Laravel queue-level retries.
      *
      * @param Classification $classification
-     * @param array<string, array{response: ?ClassificationResponse, completed: bool, error: ?string}> $results
+     * @param array<string, array{response: ?ClassificationResponse, completed: bool, error: ?string}> $results Keyed by config key
      * @param int $attempt Current attempt number
      * @param int $maxAttempts Maximum allowed attempts
      * @throws RuntimeException When transient retry is needed
@@ -425,121 +438,87 @@ class ClassifyPostsChunkJob implements ShouldQueue
         int $attempt,
         int $maxAttempts
     ): void {
-        $haikuCompleted = $results['anthropic-haiku']['completed'] ?? false;
-        $gptCompleted = $results['openai']['completed'] ?? false;
+        $completedCount = count(array_filter($results, fn ($r) => $r['completed']));
+        $totalCount = count($results);
+        $hasTransientError = collect($results)->contains(fn ($r) => $r['error'] === 'transient');
+        $isNotFinalAttempt = $attempt < $maxAttempts;
 
-        // Case 1: Both models succeeded — use model's consensus logic
-        if ($haikuCompleted && $gptCompleted) {
+        // Case 1: All completed — use model's consensus logic
+        if ($completedCount === $totalCount) {
             $classification->processResults();
             return;
         }
 
-        // Case 2: Retry logic for partial failures with transient errors
-        $bothProvidersRequested = array_key_exists('anthropic-haiku', $results) && array_key_exists('openai', $results);
-
-        if ($bothProvidersRequested && (! $haikuCompleted || ! $gptCompleted)) {
-            $haikuError = $results['anthropic-haiku']['error'] ?? null;
-            $gptError = $results['openai']['error'] ?? null;
-
-            $hasTransientError = $haikuError === 'transient' || $gptError === 'transient';
-            $isNotFinalAttempt = $attempt < $maxAttempts;
-
-            if ($hasTransientError && $isNotFinalAttempt) {
-                Log::warning('Partial classification failure with transient error, will retry', [
-                    'post_id' => $classification->post_id,
-                    'scan_id' => $this->scanId,
-                    'attempt' => $attempt,
-                    'max_attempts' => $maxAttempts,
-                    'haiku_completed' => $haikuCompleted,
-                    'haiku_error' => $haikuError,
-                    'gpt_completed' => $gptCompleted,
-                    'gpt_error' => $gptError,
-                ]);
-
-                // Delete the partial classification record (will be recreated on retry)
-                $classification->delete();
-
-                // Throw RuntimeException as retry signal to classifySinglePost()
-                throw new RuntimeException('Classification partially failed with transient error');
-            }
-
-            if ($hasTransientError) {
-                Log::warning('Partial classification failure on final attempt, using fallback', [
-                    'post_id' => $classification->post_id,
-                    'scan_id' => $this->scanId,
-                    'attempt' => $attempt,
-                    'haiku_completed' => $haikuCompleted,
-                    'gpt_completed' => $gptCompleted,
-                ]);
-            } else {
-                Log::info('Partial classification failure with permanent error, using fallback', [
-                    'post_id' => $classification->post_id,
-                    'scan_id' => $this->scanId,
-                    'haiku_completed' => $haikuCompleted,
-                    'gpt_completed' => $gptCompleted,
-                ]);
-            }
-        } else if (! $bothProvidersRequested && (! $haikuCompleted || ! $gptCompleted)) {
-            Log::debug('Single provider mode, using fallback logic', [
+        // Case 2: Has transient error and not final attempt → retry
+        if ($hasTransientError && $isNotFinalAttempt) {
+            Log::warning('Partial classification failure with transient error, will retry', [
                 'post_id' => $classification->post_id,
-                'haiku_completed' => $haikuCompleted,
-                'gpt_completed' => $gptCompleted,
+                'scan_id' => $this->scanId,
+                'attempt' => $attempt,
+                'max_attempts' => $maxAttempts,
+                'completed_count' => $completedCount,
+                'total_count' => $totalCount,
             ]);
+
+            // Delete the partial classification record (will be recreated on retry)
+            $classification->delete();
+
+            // Throw RuntimeException as retry signal to classifySinglePost()
+            throw new RuntimeException('Classification partially failed with transient error');
         }
 
-        // Both models failed — mark as discard
-        if (! $haikuCompleted && ! $gptCompleted) {
+        // Case 3: All failed → discard
+        if ($completedCount === 0) {
             $classification->final_decision = Classification::DECISION_DISCARD;
             $classification->combined_score = 0.0;
             $classification->classified_at = now();
             $classification->save();
 
-            Log::debug('Both classification providers failed, marked as discard', [
+            Log::debug('All classification providers failed, marked as discard', [
                 'classification_id' => $classification->id,
                 'post_id' => $classification->post_id,
             ]);
             return;
         }
 
-        // Only one model succeeded — apply confidence threshold fallback
-        $confidenceThreshold = 0.7;
-
-        if ($haikuCompleted && ! $gptCompleted) {
-            $verdict = $results['anthropic-haiku']['response']->verdict;
-            $confidence = $results['anthropic-haiku']['response']->confidence;
-
-            if ($verdict === 'keep') {
-                $classification->final_decision = $confidence >= $confidenceThreshold
-                    ? Classification::DECISION_KEEP
-                    : Classification::DECISION_BORDERLINE;
-                $classification->combined_score = $confidence;
-            } else {
-                $classification->final_decision = Classification::DECISION_DISCARD;
-                $classification->combined_score = 0.0;
-            }
-        } elseif ($gptCompleted && ! $haikuCompleted) {
-            $verdict = $results['openai']['response']->verdict;
-            $confidence = $results['openai']['response']->confidence;
-
-            if ($verdict === 'keep') {
-                $classification->final_decision = $confidence >= $confidenceThreshold
-                    ? Classification::DECISION_KEEP
-                    : Classification::DECISION_BORDERLINE;
-                $classification->combined_score = $confidence;
-            } else {
-                $classification->final_decision = Classification::DECISION_DISCARD;
-                $classification->combined_score = 0.0;
-            }
+        // Case 4: Partial completion (final attempt or permanent error) → fallback
+        // Use same formula as full consensus but denominator is expected_provider_count (not completed)
+        if ($hasTransientError) {
+            Log::warning('Partial classification failure on final attempt, using fallback', [
+                'post_id' => $classification->post_id,
+                'scan_id' => $this->scanId,
+                'attempt' => $attempt,
+                'completed_count' => $completedCount,
+                'total_count' => $totalCount,
+            ]);
+        } else {
+            Log::info('Partial classification failure with permanent error, using fallback', [
+                'post_id' => $classification->post_id,
+                'scan_id' => $this->scanId,
+                'completed_count' => $completedCount,
+                'total_count' => $totalCount,
+            ]);
         }
 
+        $completedResults = collect($results)->filter(fn ($r) => $r['completed']);
+        $sum = $completedResults->sum(fn ($r) =>
+            ($r['response']->confidence ?? 0.0) * ($r['response']->verdict === 'keep' ? 1 : 0)
+        );
+        $combinedScore = $sum / $classification->expected_provider_count;
+
+        $keepThreshold = (float) config('llm.classification.consensus_threshold_keep', 0.6);
+        $discardThreshold = (float) config('llm.classification.consensus_threshold_discard', 0.4);
+
+        $classification->combined_score = $combinedScore;
+        $classification->final_decision = Classification::determineFinalDecision($combinedScore, $keepThreshold, $discardThreshold);
         $classification->classified_at = now();
         $classification->save();
 
-        Log::debug('Single classification provider succeeded, applied fallback logic', [
+        Log::debug('Partial provider completion, applied fallback logic', [
             'classification_id' => $classification->id,
             'post_id' => $classification->post_id,
-            'haiku_completed' => $haikuCompleted,
-            'gpt_completed' => $gptCompleted,
+            'completed_count' => $completedCount,
+            'total_count' => $totalCount,
             'final_decision' => $classification->final_decision,
         ]);
     }
@@ -557,12 +536,13 @@ class ClassifyPostsChunkJob implements ShouldQueue
         ]);
 
         $scan = Scan::find($this->scanId);
+        $configuredProviders = config('llm.classification.providers', []);
 
         foreach ($this->postIds as $postId) {
             try {
                 // Use a locked transaction to prevent overwriting a concurrent successful classification.
                 // Lock the post row as a stable lock target to serialize all workers for this post.
-                DB::transaction(function () use ($postId, $scan) {
+                DB::transaction(function () use ($postId, $scan, $configuredProviders) {
                     $lockedPost = Post::lockForUpdate()->find($postId);
 
                     if (! $lockedPost) {
@@ -576,26 +556,37 @@ class ClassifyPostsChunkJob implements ShouldQueue
                         return;
                     }
 
-                    $discardData = [
-                        'haiku_verdict' => 'skip',
-                        'haiku_confidence' => 0.0,
-                        'haiku_category' => 'chunk-job-failed',
-                        'haiku_reasoning' => 'Classification chunk job failed permanently',
-                        'haiku_completed' => false,
-                        'gpt_verdict' => 'skip',
-                        'gpt_confidence' => 0.0,
-                        'gpt_category' => 'chunk-job-failed',
-                        'gpt_reasoning' => 'Classification chunk job failed permanently',
-                        'gpt_completed' => false,
-                        'final_decision' => Classification::DECISION_DISCARD,
-                        'combined_score' => 0.0,
-                        'classified_at' => now(),
-                    ];
-
                     if ($existing) {
-                        $existing->update($discardData);
+                        $existing->update([
+                            'final_decision' => Classification::DECISION_DISCARD,
+                            'combined_score' => 0.0,
+                            'classified_at' => now(),
+                        ]);
+                        $classification = $existing;
                     } else {
-                        Classification::create(array_merge($discardData, ['post_id' => $postId]));
+                        $classification = Classification::create([
+                            'post_id' => $postId,
+                            'final_decision' => Classification::DECISION_DISCARD,
+                            'combined_score' => 0.0,
+                            'expected_provider_count' => count($configuredProviders),
+                            'classified_at' => now(),
+                        ]);
+                    }
+
+                    foreach ($configuredProviders as $providerName) {
+                        ClassificationResult::firstOrCreate(
+                            [
+                                'classification_id' => $classification->id,
+                                'provider_name' => $providerName,
+                            ],
+                            [
+                                'verdict' => 'skip',
+                                'confidence' => 0.0,
+                                'category' => 'chunk-job-failed',
+                                'reasoning' => 'Classification chunk job failed permanently',
+                                'completed' => false,
+                            ]
+                        );
                     }
 
                     if ($scan) {

@@ -2,9 +2,12 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 
 class Classification extends Model
 {
@@ -45,18 +48,9 @@ class Classification extends Model
      */
     protected $fillable = [
         'post_id',
-        'haiku_verdict',
-        'haiku_confidence',
-        'haiku_category',
-        'haiku_reasoning',
-        'gpt_verdict',
-        'gpt_confidence',
-        'gpt_category',
-        'gpt_reasoning',
         'combined_score',
         'final_decision',
-        'haiku_completed',
-        'gpt_completed',
+        'expected_provider_count',
         'classified_at',
     ];
 
@@ -66,11 +60,8 @@ class Classification extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'haiku_confidence' => 'float',
-        'gpt_confidence' => 'float',
         'combined_score' => 'float',
-        'haiku_completed' => 'boolean',
-        'gpt_completed' => 'boolean',
+        'expected_provider_count' => 'integer',
         'classified_at' => 'datetime',
     ];
 
@@ -83,11 +74,27 @@ class Classification extends Model
     }
 
     /**
-     * Check if both models have completed classification.
+     * Get all classification results for this classification.
+     */
+    public function results(): HasMany
+    {
+        return $this->hasMany(ClassificationResult::class);
+    }
+
+    /**
+     * Check if all expected providers have completed classification.
      */
     public function isComplete(): bool
     {
-        return $this->haiku_completed && $this->gpt_completed;
+        return $this->results()->where('completed', true)->count() >= $this->expected_provider_count;
+    }
+
+    /**
+     * Check if this classification has been finalized (has a classified_at timestamp).
+     */
+    public function isFinalized(): bool
+    {
+        return $this->classified_at !== null;
     }
 
     /**
@@ -99,19 +106,61 @@ class Classification extends Model
     }
 
     /**
-     * Calculate the combined consensus score.
-     * Formula: (haiku_confidence × haiku_keep + gpt_confidence × gpt_keep) / 2
+     * Calculate the combined consensus score from a collection of completed results.
+     * Formula: sum(confidence × keep_flag) / count
+     *
+     * @param Collection<ClassificationResult> $results
      */
-    public static function calculateConsensusScore(
-        string $haikuVerdict,
-        float $haikuConfidence,
-        string $gptVerdict,
-        float $gptConfidence
-    ): float {
-        $haikuKeep = $haikuVerdict === 'keep' ? 1 : 0;
-        $gptKeep = $gptVerdict === 'keep' ? 1 : 0;
+    public static function calculateConsensusScore(Collection $results): float
+    {
+        if ($results->isEmpty()) {
+            return 0.0;
+        }
 
-        return ($haikuConfidence * $haikuKeep + $gptConfidence * $gptKeep) / 2;
+        $sum = $results->sum(fn (ClassificationResult $result) =>
+            ($result->confidence ?? 0.0) * ($result->verdict === 'keep' ? 1 : 0)
+        );
+
+        return $sum / $results->count();
+    }
+
+    /**
+     * Check if shortcut rule applies (ALL providers agree on same verdict AND all above threshold).
+     *
+     * @param Collection<ClassificationResult> $results
+     */
+    public static function checkShortcutRule(Collection $results, float $threshold = 0.8): ?string
+    {
+        if ($results->isEmpty()) {
+            return null;
+        }
+
+        // All providers must agree on the same verdict
+        $verdicts = $results->pluck('verdict')->unique();
+        if ($verdicts->count() !== 1) {
+            return null;
+        }
+
+        // All providers must be above the threshold
+        $allAboveThreshold = $results->every(fn (ClassificationResult $result) =>
+            ($result->confidence ?? 0.0) > $threshold
+        );
+
+        if (! $allAboveThreshold) {
+            return null;
+        }
+
+        $verdict = $verdicts->first();
+
+        if ($verdict === 'keep') {
+            return self::DECISION_KEEP;
+        }
+
+        if ($verdict === 'skip') {
+            return self::DECISION_DISCARD;
+        }
+
+        return null;
     }
 
     /**
@@ -134,78 +183,39 @@ class Classification extends Model
     }
 
     /**
-     * Check if shortcut rule applies (both models agree with high confidence).
-     */
-    public static function checkShortcutRule(
-        string $haikuVerdict,
-        float $haikuConfidence,
-        string $gptVerdict,
-        float $gptConfidence,
-        float $shortcutThreshold = 0.8
-    ): ?string {
-        // Both skip with high confidence = DISCARD
-        if (
-            $haikuVerdict === 'skip' && $gptVerdict === 'skip'
-            && $haikuConfidence > $shortcutThreshold && $gptConfidence > $shortcutThreshold
-        ) {
-            return self::DECISION_DISCARD;
-        }
-
-        // Both keep with high confidence = KEEP
-        if (
-            $haikuVerdict === 'keep' && $gptVerdict === 'keep'
-            && $haikuConfidence > $shortcutThreshold && $gptConfidence > $shortcutThreshold
-        ) {
-            return self::DECISION_KEEP;
-        }
-
-        return null; // No shortcut applies
-    }
-
-    /**
      * Process classification results and update the model.
+     * Loads completed results, checks shortcut, calculates consensus, saves.
      */
     public function processResults(): void
     {
-        if (! $this->isComplete()) {
+        $completedResults = $this->results()->where('completed', true)->get();
+
+        if ($completedResults->isEmpty()) {
             return;
         }
 
         // Check shortcut rules first
-        $shortcutDecision = self::checkShortcutRule(
-            $this->haiku_verdict,
-            $this->haiku_confidence,
-            $this->gpt_verdict,
-            $this->gpt_confidence
-        );
+        $shortcutThreshold = (float) config('llm.classification.shortcut_confidence', 0.8);
+        $shortcutDecision = self::checkShortcutRule($completedResults, $shortcutThreshold);
 
         if ($shortcutDecision !== null) {
             $this->combined_score = $shortcutDecision === self::DECISION_KEEP ? 1.0 : 0.0;
             $this->final_decision = $shortcutDecision;
         } else {
-            // Calculate consensus score
-            $this->combined_score = self::calculateConsensusScore(
-                $this->haiku_verdict,
-                $this->haiku_confidence,
-                $this->gpt_verdict,
-                $this->gpt_confidence
-            );
+            $keepThreshold = (float) config('llm.classification.consensus_threshold_keep', 0.6);
+            $discardThreshold = (float) config('llm.classification.consensus_threshold_discard', 0.4);
 
-            $this->final_decision = self::determineFinalDecision($this->combined_score);
+            $this->combined_score = self::calculateConsensusScore($completedResults);
+            $this->final_decision = self::determineFinalDecision(
+                $this->combined_score,
+                $keepThreshold,
+                $discardThreshold
+            );
         }
 
         $this->classified_at = now();
         $this->save();
     }
-
-    /**
-     * Provider column prefix to canonical config key mapping.
-     * Matches what ClassifyPostsChunkJob::storeClassification() uses.
-     */
-    private const PROVIDER_MAP = [
-        'haiku' => ['name' => 'anthropic-haiku', 'label' => 'Haiku'],
-        'gpt'   => ['name' => 'openai',           'label' => 'GPT'],
-    ];
 
     /**
      * Full provider output including reasoning and category (for detail views).
@@ -214,15 +224,17 @@ class Classification extends Model
     {
         $providers = [];
 
-        foreach (self::PROVIDER_MAP as $prefix => $meta) {
+        foreach ($this->results as $result) {
+            $label = config("llm.providers.{$result->provider_name}.provider_name", null);
+
             $providers[] = [
-                'name'       => $meta['name'],
-                'label'      => $meta['label'],
-                'verdict'    => $this->{"{$prefix}_verdict"},
-                'confidence' => $this->{"{$prefix}_confidence"},
-                'category'   => $this->{"{$prefix}_category"},
-                'reasoning'  => $this->{"{$prefix}_reasoning"},
-                'completed'  => (bool) $this->{"{$prefix}_completed"},
+                'name'       => $result->provider_name,
+                'label'      => $label,
+                'verdict'    => $result->verdict,
+                'confidence' => $result->confidence,
+                'category'   => $result->category,
+                'reasoning'  => $result->reasoning,
+                'completed'  => (bool) $result->completed,
             ];
         }
 
@@ -236,13 +248,15 @@ class Classification extends Model
     {
         $providers = [];
 
-        foreach (self::PROVIDER_MAP as $prefix => $meta) {
+        foreach ($this->results as $result) {
+            $label = config("llm.providers.{$result->provider_name}.provider_name", null);
+
             $providers[] = [
-                'name'       => $meta['name'],
-                'label'      => $meta['label'],
-                'verdict'    => $this->{"{$prefix}_verdict"},
-                'confidence' => $this->{"{$prefix}_confidence"},
-                'completed'  => (bool) $this->{"{$prefix}_completed"},
+                'name'       => $result->provider_name,
+                'label'      => $label,
+                'verdict'    => $result->verdict,
+                'confidence' => $result->confidence,
+                'completed'  => (bool) $result->completed,
             ];
         }
 

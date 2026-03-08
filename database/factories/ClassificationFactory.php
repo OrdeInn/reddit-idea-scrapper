@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Classification;
+use App\Models\ClassificationResult;
 use App\Models\Post;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -20,48 +21,11 @@ class ClassificationFactory extends Factory
     {
         return [
             'post_id' => Post::factory(),
-            'haiku_verdict' => null,
-            'haiku_confidence' => null,
-            'haiku_category' => null,
-            'haiku_reasoning' => null,
-            'gpt_verdict' => null,
-            'gpt_confidence' => null,
-            'gpt_category' => null,
-            'gpt_reasoning' => null,
             'combined_score' => null,
             'final_decision' => 'pending',
-            'haiku_completed' => false,
-            'gpt_completed' => false,
+            'expected_provider_count' => 2,
             'classified_at' => null,
         ];
-    }
-
-    /**
-     * State for incomplete classification (Haiku not done).
-     */
-    public function haikuIncomplete(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'haiku_verdict' => null,
-            'haiku_confidence' => null,
-            'haiku_category' => null,
-            'haiku_reasoning' => null,
-            'haiku_completed' => false,
-        ]);
-    }
-
-    /**
-     * State for incomplete classification (GPT not done).
-     */
-    public function gptIncomplete(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'gpt_verdict' => null,
-            'gpt_confidence' => null,
-            'gpt_category' => null,
-            'gpt_reasoning' => null,
-            'gpt_completed' => false,
-        ]);
     }
 
     /**
@@ -70,26 +34,21 @@ class ClassificationFactory extends Factory
     public function keep(): static
     {
         return $this->state(fn (array $attributes) => [
-            'haiku_verdict' => 'keep',
-            'gpt_verdict' => 'keep',
-            'haiku_confidence' => 0.9,
-            'gpt_confidence' => 0.9,
-            'haiku_category' => $this->faker->randomElement([
-                Classification::CATEGORY_GENUINE_PROBLEM,
-                Classification::CATEGORY_TOOL_REQUEST,
-            ]),
-            'gpt_category' => $this->faker->randomElement([
-                Classification::CATEGORY_GENUINE_PROBLEM,
-                Classification::CATEGORY_TOOL_REQUEST,
-            ]),
-            'haiku_reasoning' => $this->faker->sentence(),
-            'gpt_reasoning' => $this->faker->sentence(),
             'final_decision' => Classification::DECISION_KEEP,
             'combined_score' => 0.9,
-            'haiku_completed' => true,
-            'gpt_completed' => true,
+            'expected_provider_count' => 2,
             'classified_at' => now(),
-        ]);
+        ])->afterCreating(function (Classification $classification) {
+            ClassificationResult::factory()
+                ->keep()
+                ->forProvider('test-provider-1')
+                ->create(['classification_id' => $classification->id]);
+
+            ClassificationResult::factory()
+                ->keep()
+                ->forProvider('test-provider-2')
+                ->create(['classification_id' => $classification->id]);
+        });
     }
 
     /**
@@ -98,41 +57,86 @@ class ClassificationFactory extends Factory
     public function discard(): static
     {
         return $this->state(fn (array $attributes) => [
-            'haiku_verdict' => 'skip',
-            'gpt_verdict' => 'skip',
-            'haiku_confidence' => 0.9,
-            'gpt_confidence' => 0.9,
-            'haiku_category' => Classification::CATEGORY_SPAM,
-            'gpt_category' => Classification::CATEGORY_SPAM,
-            'haiku_reasoning' => $this->faker->sentence(),
-            'gpt_reasoning' => $this->faker->sentence(),
             'final_decision' => Classification::DECISION_DISCARD,
             'combined_score' => 0.0,
-            'haiku_completed' => true,
-            'gpt_completed' => true,
+            'expected_provider_count' => 2,
             'classified_at' => now(),
-        ]);
+        ])->afterCreating(function (Classification $classification) {
+            ClassificationResult::factory()
+                ->skip()
+                ->forProvider('test-provider-1')
+                ->create(['classification_id' => $classification->id]);
+
+            ClassificationResult::factory()
+                ->skip()
+                ->forProvider('test-provider-2')
+                ->create(['classification_id' => $classification->id]);
+        });
     }
 
     /**
-     * State for a "borderline" decision.
+     * State for a "borderline" decision (one keep, one skip).
      */
     public function borderline(): static
     {
         return $this->state(fn (array $attributes) => [
-            'haiku_verdict' => 'keep',
-            'gpt_verdict' => 'skip',
-            'haiku_confidence' => 0.5,
-            'gpt_confidence' => 0.5,
-            'haiku_category' => Classification::CATEGORY_ADVICE_THREAD,
-            'gpt_category' => Classification::CATEGORY_RANT,
-            'haiku_reasoning' => $this->faker->sentence(),
-            'gpt_reasoning' => $this->faker->sentence(),
             'final_decision' => Classification::DECISION_BORDERLINE,
             'combined_score' => 0.25,
-            'haiku_completed' => true,
-            'gpt_completed' => true,
+            'expected_provider_count' => 2,
             'classified_at' => now(),
-        ]);
+        ])->afterCreating(function (Classification $classification) {
+            ClassificationResult::factory()
+                ->keep()
+                ->forProvider('test-provider-1')
+                ->state(['confidence' => 0.5, 'category' => Classification::CATEGORY_ADVICE_THREAD])
+                ->create(['classification_id' => $classification->id]);
+
+            ClassificationResult::factory()
+                ->skip()
+                ->forProvider('test-provider-2')
+                ->state(['confidence' => 0.5, 'category' => Classification::CATEGORY_RANT])
+                ->create(['classification_id' => $classification->id]);
+        });
+    }
+
+    /**
+     * State with a specific number of keep and skip results.
+     */
+    public function withResults(int $keepCount, int $skipCount): static
+    {
+        $total = $keepCount + $skipCount;
+        return $this->state(fn (array $attributes) => [
+            'expected_provider_count' => $total,
+        ])->afterCreating(function (Classification $classification) use ($keepCount, $skipCount) {
+            for ($i = 0; $i < $keepCount; $i++) {
+                ClassificationResult::factory()
+                    ->keep()
+                    ->forProvider("test-provider-keep-{$i}")
+                    ->create(['classification_id' => $classification->id]);
+            }
+
+            for ($i = 0; $i < $skipCount; $i++) {
+                ClassificationResult::factory()
+                    ->skip()
+                    ->forProvider("test-provider-skip-{$i}")
+                    ->create(['classification_id' => $classification->id]);
+            }
+        });
+    }
+
+    /**
+     * State with specific provider names (creates incomplete results for each).
+     */
+    public function withProviders(array $providerNames): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'expected_provider_count' => count($providerNames),
+        ])->afterCreating(function (Classification $classification) use ($providerNames) {
+            foreach ($providerNames as $name) {
+                ClassificationResult::factory()
+                    ->forProvider($name)
+                    ->create(['classification_id' => $classification->id]);
+            }
+        });
     }
 }

@@ -116,7 +116,12 @@ class LLMProviderFactoryTest extends TestCase
         $this->assertIsArray($providers);
         $this->assertCount(2, $providers);
 
-        foreach ($providers as $provider) {
+        // Verify the array is keyed by config key
+        $this->assertArrayHasKey('anthropic-haiku', $providers);
+        $this->assertArrayHasKey('openai-gpt5-mini', $providers);
+
+        foreach ($providers as $configKey => $provider) {
+            $this->assertIsString($configKey);
             $this->assertInstanceOf(LLMProviderInterface::class, $provider);
             $this->assertTrue($provider->supportsClassification());
         }
@@ -211,10 +216,15 @@ class LLMProviderFactoryTest extends TestCase
         $providers = LLMProviderFactory::getClassificationProviders();
 
         $this->assertCount(2, $providers);
-        $this->assertInstanceOf(AnthropicProvider::class, $providers[0]);
-        $this->assertInstanceOf(OpenAIProvider::class, $providers[1]);
 
-        foreach ($providers as $provider) {
+        // Verify keyed by config key
+        $this->assertArrayHasKey('anthropic-haiku', $providers);
+        $this->assertArrayHasKey('openai-gpt5-mini', $providers);
+        $this->assertInstanceOf(AnthropicProvider::class, $providers['anthropic-haiku']);
+        $this->assertInstanceOf(OpenAIProvider::class, $providers['openai-gpt5-mini']);
+
+        foreach ($providers as $configKey => $provider) {
+            $this->assertIsString($configKey);
             $this->assertInstanceOf(LLMProviderInterface::class, $provider);
             $this->assertTrue($provider->supportsClassification());
         }
