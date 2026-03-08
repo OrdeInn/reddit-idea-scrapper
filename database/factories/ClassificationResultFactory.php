@@ -18,6 +18,7 @@ class ClassificationResultFactory extends Factory
         return [
             'classification_id' => Classification::factory(),
             'provider_name' => 'test-provider',
+            'model_id' => 'test-model-v1',
             'verdict' => null,
             'confidence' => null,
             'category' => null,

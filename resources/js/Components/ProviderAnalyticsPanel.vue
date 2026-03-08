@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import ProviderBadge from './ProviderBadge.vue'
+import { useProviderMetadata } from '../composables/useProviderMetadata'
 
 const props = defineProps({
     subredditId: {
@@ -68,12 +69,13 @@ const providers = computed(() => analytics.value?.classification?.providers ?? [
 const classificationIsEmpty = computed(() => totalClassified.value === 0)
 
 const extractionProviders = computed(() => {
-    const dist = analytics.value?.extraction?.provider_distribution ?? {}
-    const total = Object.values(dist).reduce((s, v) => s + v, 0)
-    return Object.entries(dist).map(([provider, count]) => ({
-        provider,
-        count,
-        percent: total > 0 ? Math.round((count / total) * 100) : 0,
+    const dist = analytics.value?.extraction?.provider_distribution ?? []
+    const total = analytics.value?.extraction?.total_extracted ?? 0
+    return dist.map(entry => ({
+        provider: entry.name,
+        display_name: entry.display_name,
+        count: entry.count,
+        percent: total > 0 ? Math.round((entry.count / total) * 100) : 0,
     }))
 })
 
@@ -98,36 +100,9 @@ const verdictBarWidth = (provider, verdict) => {
 
 const confidencePercent = (val) => Math.round((val ?? 0) * 100)
 
-const PROVIDER_BORDER_COLORS = {
-    'anthropic-haiku': 'border-purple-400 dark:border-purple-600',
-    'anthropic-sonnet': 'border-amber-400 dark:border-amber-600',
-    'anthropic-opus': 'border-red-400 dark:border-red-600',
-    'openai-gpt5-mini': 'border-emerald-400 dark:border-emerald-600',
-    'openai-gpt5-2': 'border-green-400 dark:border-green-600',
-}
+const { getProviderBorderColor } = useProviderMetadata()
 
-// Pre-defined border palette for auto-color assignment — full literal strings required for Tailwind JIT.
-const AUTO_BORDER_PALETTE = [
-    'border-blue-400 dark:border-blue-600',
-    'border-rose-400 dark:border-rose-600',
-    'border-cyan-400 dark:border-cyan-600',
-    'border-orange-400 dark:border-orange-600',
-    'border-indigo-400 dark:border-indigo-600',
-    'border-teal-400 dark:border-teal-600',
-    'border-pink-400 dark:border-pink-600',
-    'border-lime-400 dark:border-lime-600',
-]
-
-const hashProvider = (name) => {
-    let hash = 0
-    for (let i = 0; i < name.length; i++) hash += name.charCodeAt(i)
-    return hash % AUTO_BORDER_PALETTE.length
-}
-
-const providerTopBorder = (name) => {
-    if (!name) return 'border-border-default'
-    return PROVIDER_BORDER_COLORS[name] ?? AUTO_BORDER_PALETTE[hashProvider(name)]
-}
+const providerTopBorder = (name) => getProviderBorderColor(name)
 </script>
 
 <template>

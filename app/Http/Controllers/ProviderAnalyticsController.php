@@ -87,11 +87,13 @@ class ProviderAnalyticsController extends Controller
                 ->mapWithKeys(fn ($row) => [$row->category => (int) $row->count])
                 ->toArray();
 
-            $label = config("llm.providers.{$providerName}.provider_name", $providerName);
+            $displayName = config("llm.providers.{$providerName}.display_name", $providerName);
 
             $providers[] = [
-                'name'  => $providerName,
-                'label' => $label,
+                'name'         => $providerName,
+                'display_name' => $displayName,
+                'model'        => config("llm.providers.{$providerName}.model", null),
+                'vendor'       => config("llm.providers.{$providerName}.vendor", null),
                 'total_completed'      => $stats ? (int) $stats->total_completed : 0,
                 'avg_confidence'       => $stats ? round((float) $stats->avg_confidence, 3) : 0.0,
                 'verdict_distribution' => [
@@ -123,7 +125,11 @@ class ProviderAnalyticsController extends Controller
             ->get();
 
         $total = $rows->sum('count');
-        $distribution = $rows->mapWithKeys(fn ($row) => [$row->provider => (int) $row->count])->toArray();
+        $distribution = $rows->map(fn ($row) => [
+            'name'         => $row->provider,
+            'display_name' => config("llm.providers.{$row->provider}.display_name", $row->provider),
+            'count'        => (int) $row->count,
+        ])->values()->toArray();
 
         return [
             'total_extracted'       => (int) $total,
@@ -135,8 +141,10 @@ class ProviderAnalyticsController extends Controller
     {
         $configuredProviders = config('llm.classification.providers', []);
         $providers = array_map(fn ($name) => [
-            'name'  => $name,
-            'label' => config("llm.providers.{$name}.provider_name", $name),
+            'name'         => $name,
+            'display_name' => config("llm.providers.{$name}.display_name", $name),
+            'model'        => config("llm.providers.{$name}.model", null),
+            'vendor'       => config("llm.providers.{$name}.vendor", null),
             'total_completed'       => 0,
             'avg_confidence'        => 0.0,
             'verdict_distribution'  => ['keep' => 0, 'skip' => 0],

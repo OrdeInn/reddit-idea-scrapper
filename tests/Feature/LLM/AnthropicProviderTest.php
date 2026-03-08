@@ -28,7 +28,10 @@ class AnthropicProviderTest extends TestCase
             'model' => 'claude-haiku-4-5-20251001',
             'max_tokens' => 1024,
             'temperature' => 0.3,
-            'provider_name' => 'anthropic-haiku',
+            'config_key' => 'anthropic-haiku',
+            'display_name' => 'Claude Haiku 4.5',
+            'vendor' => 'anthropic',
+            'color' => 'purple',
             'capabilities' => ['classification'],
         ];
 
@@ -37,7 +40,10 @@ class AnthropicProviderTest extends TestCase
             'model' => 'claude-sonnet-4-5-20250929',
             'max_tokens' => 4096,
             'temperature' => 0.5,
-            'provider_name' => 'anthropic-sonnet',
+            'config_key' => 'anthropic-sonnet',
+            'display_name' => 'Claude Sonnet 4.5',
+            'vendor' => 'anthropic',
+            'color' => 'amber',
             'capabilities' => ['classification', 'extraction'],
         ];
 
@@ -46,7 +52,10 @@ class AnthropicProviderTest extends TestCase
             'model' => 'claude-opus-4-6',
             'max_tokens' => 4096,
             'temperature' => 0.5,
-            'provider_name' => 'anthropic-opus',
+            'config_key' => 'anthropic-opus',
+            'display_name' => 'Claude Opus 4.6',
+            'vendor' => 'anthropic',
+            'color' => 'red',
             'capabilities' => ['extraction'],
         ];
 
@@ -577,13 +586,24 @@ class AnthropicProviderTest extends TestCase
         $this->assertEquals('claude-haiku-4-5-20251001', $provider->getModelName());
     }
 
-    public function test_missing_provider_name_throws_exception(): void
+    public function test_missing_config_key_throws_exception(): void
     {
         $config = $this->haikuConfig;
-        unset($config['provider_name']);
+        unset($config['config_key']);
 
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('provider_name');
+        $this->expectExceptionMessage('config_key');
+
+        new AnthropicProvider($config);
+    }
+
+    public function test_missing_display_name_throws_exception(): void
+    {
+        $config = $this->haikuConfig;
+        unset($config['display_name']);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('display_name');
 
         new AnthropicProvider($config);
     }

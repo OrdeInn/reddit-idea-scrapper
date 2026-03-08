@@ -131,7 +131,7 @@ class ScanExtractCommand extends Command
                     } else {
                         // Store ideas and mark post as extracted in atomic transaction
                         $derivedScan = $isScanMode ? $scan : ($post->scan_id ? $post->scan : null);
-                        $ideasCount = $this->storeIdeas($post, $derivedScan, $response, $isScanMode);
+                        $ideasCount = $this->storeIdeas($post, $derivedScan, $response, $isScanMode, $provider->getProviderName(), $provider->getModelName());
                     }
 
                     $results['total_ideas'] += $ideasCount;
@@ -249,13 +249,13 @@ class ScanExtractCommand extends Command
      * Store extracted ideas in database, mark post as extracted, and update scan counter atomically.
      * Returns count of ideas stored.
      */
-    private function storeIdeas(Post $post, ?Scan $scan, $response, bool $isScanMode): int
+    private function storeIdeas(Post $post, ?Scan $scan, $response, bool $isScanMode, string $providerName = '', string $modelId = ''): int
     {
         $count = 0;
         $classificationStatus = $post->classification?->final_decision ?? 'keep';
         $maxIdeas = config('llm.extraction.max_ideas_per_post', 5);
 
-        DB::transaction(function () use ($response, $post, $scan, $classificationStatus, $maxIdeas, $isScanMode, &$count) {
+        DB::transaction(function () use ($response, $post, $scan, $classificationStatus, $maxIdeas, $isScanMode, $providerName, $modelId, &$count) {
             // Store ideas if any exist
             if ($response->hasIdeas()) {
                 foreach ($response->ideas as $ideaDTO) {
@@ -265,6 +265,8 @@ class ScanExtractCommand extends Command
                         'post_id' => $post->id,
                         'scan_id' => $scan?->id,
                         'classification_status' => $classificationStatus,
+                        'extraction_provider' => $providerName ?: null,
+                        'extraction_model_id' => $modelId ?: null,
                     ]));
 
                     $count++;

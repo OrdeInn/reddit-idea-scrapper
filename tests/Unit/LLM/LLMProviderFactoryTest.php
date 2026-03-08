@@ -66,7 +66,7 @@ class LLMProviderFactoryTest extends TestCase
         $provider = LLMProviderFactory::make('openai-gpt5-mini');
 
         $this->assertInstanceOf(OpenAIProvider::class, $provider);
-        $this->assertEquals('openai', $provider->getProviderName()); // Must remain 'openai' for DB column mapping
+        $this->assertEquals('openai-gpt5-mini', $provider->getProviderName());
         $this->assertTrue($provider->supportsClassification());
         $this->assertFalse($provider->supportsExtraction());
     }
@@ -79,6 +79,78 @@ class LLMProviderFactoryTest extends TestCase
         $this->assertEquals('openai-gpt5-2', $provider->getProviderName());
         $this->assertFalse($provider->supportsClassification());
         $this->assertTrue($provider->supportsExtraction());
+    }
+
+    public function test_get_display_name_returns_versioned_label_for_anthropic_haiku(): void
+    {
+        $provider = LLMProviderFactory::make('anthropic-haiku');
+
+        $this->assertEquals('Claude Haiku 4.5', $provider->getDisplayName());
+    }
+
+    public function test_get_display_name_returns_versioned_label_for_openai_gpt5_mini(): void
+    {
+        $provider = LLMProviderFactory::make('openai-gpt5-mini');
+
+        $this->assertEquals('GPT-5 Mini', $provider->getDisplayName());
+    }
+
+    public function test_get_display_name_returns_versioned_labels_for_all_providers(): void
+    {
+        $expected = [
+            'anthropic-sonnet' => 'Claude Sonnet 4.5',
+            'anthropic-haiku'  => 'Claude Haiku 4.5',
+            'anthropic-opus'   => 'Claude Opus 4.6',
+            'openai-gpt5-mini' => 'GPT-5 Mini',
+            'openai-gpt5-2'    => 'GPT-5.2',
+        ];
+
+        foreach ($expected as $configKey => $displayName) {
+            $provider = LLMProviderFactory::make($configKey);
+            $this->assertEquals($displayName, $provider->getDisplayName(), "Display name mismatch for {$configKey}");
+        }
+    }
+
+    public function test_provider_metadata_returns_complete_structure(): void
+    {
+        $factory = new LLMProviderFactory();
+        $metadata = $factory->providerMetadata();
+
+        $this->assertIsArray($metadata);
+        $this->assertCount(5, $metadata);
+
+        $haiku = collect($metadata)->firstWhere('config_key', 'anthropic-haiku');
+        $this->assertNotNull($haiku);
+        $this->assertEquals('Claude Haiku 4.5', $haiku['display_name']);
+        $this->assertEquals('claude-haiku-4-5-20251001', $haiku['model']);
+        $this->assertEquals('anthropic', $haiku['vendor']);
+        $this->assertEquals('purple', $haiku['color']);
+        $this->assertEquals(['classification'], $haiku['capabilities']);
+
+        $gptMini = collect($metadata)->firstWhere('config_key', 'openai-gpt5-mini');
+        $this->assertNotNull($gptMini);
+        $this->assertEquals('GPT-5 Mini', $gptMini['display_name']);
+        $this->assertEquals('gpt-5-mini-2025-08-07', $gptMini['model']);
+        $this->assertEquals('openai', $gptMini['vendor']);
+        $this->assertEquals('emerald', $gptMini['color']);
+    }
+
+    public function test_constructor_throws_when_display_name_is_missing(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Config display_name must be a non-empty string');
+
+        config(['llm.providers.test-provider' => [
+            'class'       => AnthropicProvider::class,
+            'api_key'     => 'test-key',
+            'model'       => 'some-model',
+            'max_tokens'  => 1024,
+            'temperature' => 0.3,
+            'capabilities' => ['classification'],
+            // display_name intentionally missing
+        ]]);
+
+        LLMProviderFactory::make('test-provider');
     }
 
     public function test_openai_classifier_uses_gpt_5_mini_model(): void
@@ -165,7 +237,9 @@ class LLMProviderFactoryTest extends TestCase
                     'model' => 'claude-opus-4-6',
                     'max_tokens' => 4096,
                     'temperature' => 0.5,
-                    'provider_name' => 'anthropic-opus',
+                    'display_name' => 'Claude Opus 4.6',
+                    'vendor' => 'anthropic',
+                    'color' => 'red',
                     'capabilities' => ['extraction'],
                 ],
             ]),
@@ -197,7 +271,9 @@ class LLMProviderFactoryTest extends TestCase
                     'model' => 'claude-haiku-4-5-20251001',
                     'max_tokens' => 1024,
                     'temperature' => 0.3,
-                    'provider_name' => 'anthropic-haiku',
+                    'display_name' => 'Claude Haiku 4.5',
+                    'vendor' => 'anthropic',
+                    'color' => 'purple',
                     'capabilities' => ['classification'],
                 ],
                 'openai-gpt5-mini' => [
@@ -206,7 +282,9 @@ class LLMProviderFactoryTest extends TestCase
                     'model' => 'gpt-4o-mini',
                     'max_tokens' => 1024,
                     'temperature' => 0.3,
-                    'provider_name' => 'openai',
+                    'display_name' => 'GPT-5 Mini',
+                    'vendor' => 'openai',
+                    'color' => 'emerald',
                     'capabilities' => ['classification'],
                 ],
             ],

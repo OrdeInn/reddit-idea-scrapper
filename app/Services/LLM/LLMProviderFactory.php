@@ -51,6 +51,9 @@ class LLMProviderFactory
             throw new InvalidArgumentException("LLM provider class '{$class}' must implement LLMProviderInterface");
         }
 
+        // Inject the config key so BaseLLMProvider can use it as canonical identifier
+        $config['config_key'] = $providerName;
+
         return new $class($config);
     }
 
@@ -124,5 +127,33 @@ class LLMProviderFactory
         }
 
         return array_keys($providers);
+    }
+
+    /**
+     * Return metadata for all configured providers.
+     *
+     * @return array<int, array{config_key: string, display_name: string, model: string, vendor: string, color: string|null, capabilities: array}>
+     */
+    public function providerMetadata(): array
+    {
+        $providerConfigs = config('llm.providers', []);
+
+        if (! is_array($providerConfigs)) {
+            return [];
+        }
+
+        $metadata = [];
+        foreach ($providerConfigs as $configKey => $config) {
+            $metadata[] = [
+                'config_key'   => $configKey,
+                'display_name' => $config['display_name'] ?? $configKey,
+                'model'        => $config['model'] ?? null,
+                'vendor'       => $config['vendor'] ?? null,
+                'color'        => $config['color'] ?? null,
+                'capabilities' => $config['capabilities'] ?? [],
+            ];
+        }
+
+        return $metadata;
     }
 }

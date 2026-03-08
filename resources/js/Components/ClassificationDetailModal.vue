@@ -2,6 +2,7 @@
 import { ref, watch, computed, onBeforeUnmount } from 'vue'
 import BaseModal from './BaseModal.vue'
 import ProviderBadge from './ProviderBadge.vue'
+import { useProviderMetadata } from '../composables/useProviderMetadata'
 
 const props = defineProps({
     open: {
@@ -86,36 +87,9 @@ const confidenceBarColor = (val) => {
     return 'from-red-400 to-red-500'
 }
 
-const PROVIDER_BORDER_COLORS = {
-    'anthropic-haiku': 'border-purple-400 dark:border-purple-600',
-    'anthropic-sonnet': 'border-amber-400 dark:border-amber-600',
-    'anthropic-opus': 'border-red-400 dark:border-red-600',
-    'openai-gpt5-mini': 'border-emerald-400 dark:border-emerald-600',
-    'openai-gpt5-2': 'border-green-400 dark:border-green-600',
-}
+const { getProviderBorderColor } = useProviderMetadata()
 
-// Pre-defined border palette for auto-color assignment — full literal strings required for Tailwind JIT.
-const AUTO_BORDER_PALETTE = [
-    'border-blue-400 dark:border-blue-600',
-    'border-rose-400 dark:border-rose-600',
-    'border-cyan-400 dark:border-cyan-600',
-    'border-orange-400 dark:border-orange-600',
-    'border-indigo-400 dark:border-indigo-600',
-    'border-teal-400 dark:border-teal-600',
-    'border-pink-400 dark:border-pink-600',
-    'border-lime-400 dark:border-lime-600',
-]
-
-const hashProvider = (name) => {
-    let hash = 0
-    for (let i = 0; i < name.length; i++) hash += name.charCodeAt(i)
-    return hash % AUTO_BORDER_PALETTE.length
-}
-
-const providerTopBorder = (name) => {
-    if (!name) return 'border-border-default'
-    return PROVIDER_BORDER_COLORS[name] ?? AUTO_BORDER_PALETTE[hashProvider(name)]
-}
+const providerTopBorder = (name) => getProviderBorderColor(name)
 
 const verdictClasses = (verdict) => verdict === 'keep'
     ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
@@ -216,7 +190,7 @@ const decisionClasses = (decision) => {
                 >
                     <!-- Card header -->
                     <div class="flex items-center justify-between px-4 pt-4 pb-3 border-b border-border-subtle">
-                        <ProviderBadge :provider="provider.name" size="sm" :show-model="true" />
+                        <ProviderBadge :provider="provider.name" size="sm" :show-model="true" :model-id="provider.model_id" />
                         <span
                             v-if="provider.completed"
                             :class="['inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold', verdictClasses(provider.verdict)]"

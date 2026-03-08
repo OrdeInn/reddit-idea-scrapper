@@ -28,7 +28,10 @@ class OpenAIProviderTest extends TestCase
             'model' => 'gpt-4o-mini',
             'max_tokens' => 1024,
             'temperature' => 0.3,
-            'provider_name' => 'openai',
+            'config_key' => 'openai-gpt5-mini',
+            'display_name' => 'GPT-5 Mini',
+            'vendor' => 'openai',
+            'color' => 'emerald',
             'capabilities' => ['classification'],
         ];
 
@@ -37,7 +40,10 @@ class OpenAIProviderTest extends TestCase
             'model' => 'gpt-4o-mini',
             'max_tokens' => 4096,
             'temperature' => 0.5,
-            'provider_name' => 'openai-gpt5-2',
+            'config_key' => 'openai-gpt5-2',
+            'display_name' => 'GPT-5.2',
+            'vendor' => 'openai',
+            'color' => 'green',
             'capabilities' => ['extraction'],
         ];
 
@@ -183,7 +189,7 @@ class OpenAIProviderTest extends TestCase
     public function test_get_provider_name_from_config(): void
     {
         $provider = new OpenAIProvider($this->baseConfig);
-        $this->assertEquals('openai', $provider->getProviderName());
+        $this->assertEquals('openai-gpt5-mini', $provider->getProviderName());
     }
 
     public function test_throws_exception_on_api_error(): void
@@ -661,7 +667,6 @@ class OpenAIProviderTest extends TestCase
     {
         $gpt52Config = array_merge($this->extractionConfig, [
             'model' => 'gpt-5.2-2026-01-24',
-            'provider_name' => 'openai-gpt5-2',
         ]);
 
         Http::fake(function ($request) {
@@ -684,7 +689,10 @@ class OpenAIProviderTest extends TestCase
             'model' => 'gpt-5.2-2026-01-24',
             'max_tokens' => 4096,
             'temperature' => 0.5,
-            'provider_name' => 'openai-gpt5-2',
+            'config_key' => 'openai-gpt5-2',
+            'display_name' => 'GPT-5.2',
+            'vendor' => 'openai',
+            'color' => 'green',
             'capabilities' => ['extraction'],
         ];
 

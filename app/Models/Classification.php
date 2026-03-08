@@ -225,16 +225,17 @@ class Classification extends Model
         $providers = [];
 
         foreach ($this->results as $result) {
-            $label = config("llm.providers.{$result->provider_name}.provider_name", null);
+            $displayName = config("llm.providers.{$result->provider_name}.display_name", $result->provider_name);
 
             $providers[] = [
-                'name'       => $result->provider_name,
-                'label'      => $label,
-                'verdict'    => $result->verdict,
-                'confidence' => $result->confidence,
-                'category'   => $result->category,
-                'reasoning'  => $result->reasoning,
-                'completed'  => (bool) $result->completed,
+                'name'         => $result->provider_name,
+                'display_name' => $displayName,
+                'model_id'     => $result->model_id,
+                'verdict'      => $result->verdict,
+                'confidence'   => $result->confidence,
+                'category'     => $result->category,
+                'reasoning'    => $result->reasoning,
+                'completed'    => (bool) $result->completed,
             ];
         }
 
@@ -249,14 +250,15 @@ class Classification extends Model
         $providers = [];
 
         foreach ($this->results as $result) {
-            $label = config("llm.providers.{$result->provider_name}.provider_name", null);
+            $displayName = config("llm.providers.{$result->provider_name}.display_name", $result->provider_name);
 
             $providers[] = [
-                'name'       => $result->provider_name,
-                'label'      => $label,
-                'verdict'    => $result->verdict,
-                'confidence' => $result->confidence,
-                'completed'  => (bool) $result->completed,
+                'name'         => $result->provider_name,
+                'display_name' => $displayName,
+                'model_id'     => $result->model_id,
+                'verdict'      => $result->verdict,
+                'confidence'   => $result->confidence,
+                'completed'    => (bool) $result->completed,
             ];
         }
 

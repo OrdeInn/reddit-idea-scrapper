@@ -64,4 +64,32 @@ class ClassificationResultTest extends TestCase
         $this->assertCount(2, $haikuResults);
         $haikuResults->each(fn ($r) => $this->assertEquals('anthropic-haiku', $r->provider_name));
     }
+
+    public function test_model_id_is_fillable_and_stored_correctly(): void
+    {
+        $classification = Classification::factory()->create();
+
+        $result = ClassificationResult::factory()->create([
+            'classification_id' => $classification->id,
+            'model_id' => 'claude-haiku-4-5-20251001',
+        ]);
+
+        $this->assertEquals('claude-haiku-4-5-20251001', $result->model_id);
+        $this->assertDatabaseHas('classification_results', [
+            'id' => $result->id,
+            'model_id' => 'claude-haiku-4-5-20251001',
+        ]);
+    }
+
+    public function test_model_id_can_be_null(): void
+    {
+        $classification = Classification::factory()->create();
+
+        $result = ClassificationResult::factory()->create([
+            'classification_id' => $classification->id,
+            'model_id' => null,
+        ]);
+
+        $this->assertNull($result->model_id);
+    }
 }

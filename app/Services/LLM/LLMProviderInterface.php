@@ -28,9 +28,14 @@ interface LLMProviderInterface
     public function extract(ExtractionRequest $request): ExtractionResponse;
 
     /**
-     * Get the provider name (e.g., "anthropic", "openai").
+     * Get the provider config key (e.g., "anthropic-haiku", "openai-gpt5-mini").
      */
     public function getProviderName(): string;
+
+    /**
+     * Get the versioned human-readable display name (e.g., "Claude Haiku 4.5", "GPT-5 Mini").
+     */
+    public function getDisplayName(): string;
 
     /**
      * Get the model name being used (e.g., "claude-sonnet-4-5-20250929", "gpt-5-mini-2025-08-07").

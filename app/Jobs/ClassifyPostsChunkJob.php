@@ -214,6 +214,7 @@ class ClassifyPostsChunkJob implements ShouldQueue
                                     'provider_name' => $providerName,
                                 ],
                                 [
+                                    'model_id' => null,
                                     'verdict' => 'skip',
                                     'confidence' => 0.0,
                                     'category' => 'chunk-job-failed',
@@ -321,6 +322,7 @@ class ClassifyPostsChunkJob implements ShouldQueue
                         'response' => $response,
                         'completed' => true,
                         'error' => null,
+                        'model_id' => $provider->getModelName(),
                     ];
                 } catch (TransientClassificationException $e) {
                     Log::warning('Transient provider error', [
@@ -338,6 +340,7 @@ class ClassifyPostsChunkJob implements ShouldQueue
                         ),
                         'completed' => false,
                         'error' => 'transient',
+                        'model_id' => $provider->getModelName(),
                     ];
                 } catch (PermanentClassificationException $e) {
                     Log::error('Permanent provider error', [
@@ -355,6 +358,7 @@ class ClassifyPostsChunkJob implements ShouldQueue
                         ),
                         'completed' => false,
                         'error' => 'permanent',
+                        'model_id' => $provider->getModelName(),
                     ];
                 } catch (Throwable $e) {
                     Log::error('Unknown provider error', [
@@ -373,6 +377,7 @@ class ClassifyPostsChunkJob implements ShouldQueue
                         ),
                         'completed' => false,
                         'error' => 'transient',
+                        'model_id' => $provider->getModelName(),
                     ];
                 }
             };
@@ -402,6 +407,7 @@ class ClassifyPostsChunkJob implements ShouldQueue
             ClassificationResult::create([
                 'classification_id' => $classification->id,
                 'provider_name' => $configKey,
+                'model_id' => $result['model_id'] ?? null,
                 'verdict' => $response->verdict,
                 'confidence' => $response->confidence,
                 'category' => $response->category,
@@ -580,6 +586,7 @@ class ClassifyPostsChunkJob implements ShouldQueue
                                 'provider_name' => $providerName,
                             ],
                             [
+                                'model_id' => null,
                                 'verdict' => 'skip',
                                 'confidence' => 0.0,
                                 'category' => 'chunk-job-failed',

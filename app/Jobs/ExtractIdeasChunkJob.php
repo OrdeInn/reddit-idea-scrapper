@@ -209,7 +209,7 @@ class ExtractIdeasChunkJob implements ShouldQueue
                 }
 
                 // Success — store results and return
-                $ideasCreated = $this->storeIdeasAndMarkExtracted($response, $post, $scan, $provider->getProviderName());
+                $ideasCreated = $this->storeIdeasAndMarkExtracted($response, $post, $scan, $provider->getProviderName(), $provider->getModelName());
 
                 Log::info('Ideas extracted and stored for post', [
                     'post_id' => $post->id,
@@ -257,13 +257,13 @@ class ExtractIdeasChunkJob implements ShouldQueue
      * @param Scan $scan
      * @return int Number of ideas created
      */
-    private function storeIdeasAndMarkExtracted(ExtractionResponse $response, Post $post, Scan $scan, string $providerName): int
+    private function storeIdeasAndMarkExtracted(ExtractionResponse $response, Post $post, Scan $scan, string $providerName, string $modelId): int
     {
         $count = 0;
         $classificationStatus = $post->classification?->final_decision ?? 'keep';
         $maxIdeas = config('llm.extraction.max_ideas_per_post', 5);
 
-        DB::transaction(function () use ($response, $post, $scan, $classificationStatus, $maxIdeas, $providerName, &$count) {
+        DB::transaction(function () use ($response, $post, $scan, $classificationStatus, $maxIdeas, $providerName, $modelId, &$count) {
             // Acquire exclusive row lock on the post to prevent concurrent extraction
             $lockedPost = Post::lockForUpdate()->find($post->id);
 
@@ -291,6 +291,7 @@ class ExtractIdeasChunkJob implements ShouldQueue
                         'scan_id' => $scan->id,
                         'classification_status' => $classificationStatus,
                         'extraction_provider' => $providerName,
+                        'extraction_model_id' => $modelId,
                     ]));
 
                     $count++;

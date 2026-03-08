@@ -14,6 +14,7 @@ class ClassificationResult extends Model
     protected $fillable = [
         'classification_id',
         'provider_name',
+        'model_id',
         'verdict',
         'confidence',
         'category',

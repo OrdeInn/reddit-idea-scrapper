@@ -69,8 +69,17 @@ return [
     |
     | Each entry must have:
     |   - class: The provider class (AnthropicProvider or OpenAIProvider)
-    |   - provider_name: Value returned by getProviderName() — used for DB column mapping
+    |   - display_name: Versioned human-readable label shown in the UI (e.g., "Claude Haiku 4.5")
+    |   - vendor: Provider vendor identifier for grouping (e.g., "anthropic", "openai")
+    |   - color: UI color for badges/borders — must be one of the palette enum values:
+    |       amber, purple, red, emerald, green, blue, rose, cyan, orange, indigo, teal, pink, lime
     |   - capabilities: Array of supported operations ('classification', 'extraction')
+    |
+    | CONFIG KEY IMMUTABILITY RULE:
+    |   Each config key is permanently bound to a specific model. Changing the underlying
+    |   model (e.g., upgrading gpt-5-mini-2025-08-07 to a newer version) requires creating
+    |   a NEW config key (e.g., openai-gpt5-mini-v2). This ensures historical DB records
+    |   remain accurate since they reference the config key via provider_name column.
     |
     */
 
@@ -81,7 +90,9 @@ return [
             'model' => 'claude-sonnet-4-5-20250929',
             'max_tokens' => 4096,
             'temperature' => 0.5,
-            'provider_name' => 'anthropic-sonnet',
+            'display_name' => 'Claude Sonnet 4.5',
+            'vendor' => 'anthropic',
+            'color' => 'amber',
             'capabilities' => ['classification', 'extraction'],
         ],
 
@@ -91,7 +102,9 @@ return [
             'model' => 'claude-haiku-4-5-20251001',
             'max_tokens' => 1024,
             'temperature' => 0.3,
-            'provider_name' => 'anthropic-haiku',
+            'display_name' => 'Claude Haiku 4.5',
+            'vendor' => 'anthropic',
+            'color' => 'purple',
             'capabilities' => ['classification'],
         ],
 
@@ -101,7 +114,9 @@ return [
             'model' => 'claude-opus-4-6',
             'max_tokens' => 4096,
             'temperature' => 0.5,
-            'provider_name' => 'anthropic-opus',
+            'display_name' => 'Claude Opus 4.6',
+            'vendor' => 'anthropic',
+            'color' => 'red',
             'capabilities' => ['extraction'],
         ],
 
@@ -111,7 +126,9 @@ return [
             'model' => 'gpt-5-mini-2025-08-07',
             'max_tokens' => 1024,
             'temperature' => 0.3,
-            'provider_name' => 'openai',
+            'display_name' => 'GPT-5 Mini',
+            'vendor' => 'openai',
+            'color' => 'emerald',
             'capabilities' => ['classification'],
         ],
 
@@ -121,7 +138,9 @@ return [
             'model' => 'gpt-5.2-2026-01-24',
             'max_tokens' => 4096,
             'temperature' => 0.5,
-            'provider_name' => 'openai-gpt5-2',
+            'display_name' => 'GPT-5.2',
+            'vendor' => 'openai',
+            'color' => 'green',
             'capabilities' => ['extraction'],
         ],
 

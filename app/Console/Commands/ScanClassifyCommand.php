@@ -266,6 +266,7 @@ class ScanClassifyCommand extends Command
                 'response' => $response,
                 'completed' => true,
                 'error' => null,
+                'model_id' => $provider->getModelName(),
             ];
         } catch (\Exception $e) {
             Log::warning('Provider classification failed', [
@@ -277,6 +278,7 @@ class ScanClassifyCommand extends Command
                 'response' => null,
                 'completed' => false,
                 'error' => $e->getMessage(),
+                'model_id' => $provider->getModelName(),
             ];
         }
     }
@@ -299,6 +301,7 @@ class ScanClassifyCommand extends Command
             ClassificationResult::create([
                 'classification_id' => $classification->id,
                 'provider_name' => $configKey,
+                'model_id' => $result['model_id'] ?? null,
                 'verdict' => $response?->verdict,
                 'confidence' => $response?->confidence,
                 'category' => $response?->category,

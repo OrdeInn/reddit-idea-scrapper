@@ -14,7 +14,8 @@ abstract class BaseLLMProvider implements LLMProviderInterface
     protected float $temperature;
     protected int $connectTimeout;
     protected int $requestTimeout;
-    protected string $providerName;
+    protected string $configKey;
+    protected string $displayName;
     protected array $capabilities;
     protected ?LLMLogger $logger = null;
 
@@ -22,7 +23,8 @@ abstract class BaseLLMProvider implements LLMProviderInterface
     {
         $apiKey = $config['api_key'] ?? '';
         $model = $config['model'] ?? '';
-        $providerName = $config['provider_name'] ?? null;
+        $configKey = $config['config_key'] ?? null;
+        $displayName = $config['display_name'] ?? null;
 
         if (! is_string($apiKey)) {
             throw new \InvalidArgumentException('Config api_key must be a string');
@@ -30,13 +32,17 @@ abstract class BaseLLMProvider implements LLMProviderInterface
         if (! is_string($model)) {
             throw new \InvalidArgumentException('Config model must be a string');
         }
-        if (! is_string($providerName) || $providerName === '') {
-            throw new \InvalidArgumentException('Config provider_name must be a non-empty string');
+        if (! is_string($configKey) || $configKey === '') {
+            throw new \InvalidArgumentException('Config config_key must be a non-empty string');
+        }
+        if (! is_string($displayName) || $displayName === '') {
+            throw new \InvalidArgumentException('Config display_name must be a non-empty string');
         }
 
         $this->apiKey = $apiKey;
         $this->model = $model;
-        $this->providerName = $providerName;
+        $this->configKey = $configKey;
+        $this->displayName = $displayName;
         $this->capabilities = $config['capabilities'] ?? ['classification', 'extraction'];
         $this->maxTokens = (int) ($config['max_tokens'] ?? 1024);
         $this->temperature = (float) ($config['temperature'] ?? 0.5);
@@ -322,11 +328,19 @@ abstract class BaseLLMProvider implements LLMProviderInterface
     }
 
     /**
-     * Get the provider name from config.
+     * Get the provider config key (e.g., "anthropic-haiku", "openai-gpt5-mini").
      */
     public function getProviderName(): string
     {
-        return $this->providerName;
+        return $this->configKey;
+    }
+
+    /**
+     * Get the versioned human-readable display name (e.g., "Claude Haiku 4.5", "GPT-5 Mini").
+     */
+    public function getDisplayName(): string
+    {
+        return $this->displayName;
     }
 
     /**

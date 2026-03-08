@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import FilterChip from './FilterChip.vue'
+import { useProviderMetadata } from '../composables/useProviderMetadata'
 
 const props = defineProps({
     filters: {
@@ -26,6 +27,8 @@ watch(
     },
     { deep: true }
 )
+
+const { extractionFilterProviders } = useProviderMetadata()
 
 // Effective defaults — use provided defaults or fallback
 const effectiveDefaults = computed(() => props.defaults ?? {
@@ -269,9 +272,11 @@ const clearAllFilters = () => {
                             class="w-full px-3 py-2 text-sm border border-border-default rounded-lg bg-surface-secondary text-content-primary focus:outline-none focus:border-brand-500"
                         >
                             <option value="">All Providers</option>
-                            <option value="anthropic-sonnet">Sonnet</option>
-                            <option value="anthropic-opus">Opus</option>
-                            <option value="openai-gpt5-2">GPT-5.2</option>
+                            <option
+                                v-for="p in extractionFilterProviders"
+                                :key="p.config_key"
+                                :value="p.config_key"
+                            >{{ p.display_name }}</option>
                         </select>
                     </div>
 

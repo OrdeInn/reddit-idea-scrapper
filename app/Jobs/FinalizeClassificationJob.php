@@ -116,6 +116,7 @@ class FinalizeClassificationJob implements ShouldQueue
                 ClassificationResult::firstOrCreate(
                     ['classification_id' => $classification->id, 'provider_name' => $providerName],
                     [
+                        'model_id' => null,
                         'verdict' => 'skip',
                         'confidence' => 0.0,
                         'category' => 'finalization-gap-fill',

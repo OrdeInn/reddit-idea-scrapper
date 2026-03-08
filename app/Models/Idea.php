@@ -38,6 +38,7 @@ class Idea extends Model
         'source_quote',
         'classification_status',
         'extraction_provider',
+        'extraction_model_id',
         'is_starred',
         'starred_at',
     ];
