@@ -54,11 +54,11 @@ class OpenAIProvider extends BaseLLMProvider
     {
         $requestPayload = [
             'model' => $this->model,
-            'response_format' => ['type' => 'json_object'],
+            'response_format' => $this->getClassificationResponseFormat(),
             'messages' => [
                 [
                     'role' => 'system',
-                    'content' => 'You are a classification assistant. Analyze Reddit posts and classify them as potential SaaS idea sources. Respond only in JSON format.',
+                    'content' => 'You are a precision-first classification assistant. Return exactly one JSON object that matches the provided schema.',
                 ],
                 [
                     'role' => 'user',
@@ -219,6 +219,7 @@ class OpenAIProvider extends BaseLLMProvider
                 confidence: 0.0,
                 category: 'content-filtered',
                 reasoning: 'Content was filtered by the API',
+                details: [],
                 rawResponse: $rawResponse,
             );
         }
@@ -294,7 +295,9 @@ class OpenAIProvider extends BaseLLMProvider
             ]);
 
             throw new TransientClassificationException(
-                message: 'OpenAI API returned empty content',
+                message: $finishReason === 'length'
+                    ? 'OpenAI API exhausted completion budget during classification'
+                    : 'OpenAI API returned empty content',
                 provider: $this->getProviderName()
             );
         }
@@ -602,5 +605,63 @@ class OpenAIProvider extends BaseLLMProvider
         }
 
         return $this->temperature;
+    }
+
+    private function getClassificationResponseFormat(): array
+    {
+        return [
+            'type' => 'json_schema',
+            'json_schema' => [
+                'name' => 'classification_result',
+                'strict' => true,
+                'schema' => [
+                    'type' => 'object',
+                    'additionalProperties' => false,
+                    'properties' => [
+                        'hard_filter_triggered' => ['type' => 'boolean'],
+                        'hard_filter_reason' => ['type' => ['string', 'null']],
+                        'evidence_type' => [
+                            'type' => 'string',
+                            'enum' => ['none', 'op-only', 'repeated-pain', 'explicit-tool-demand', 'already-solved'],
+                        ],
+                        'points' => [
+                            'type' => ['object', 'null'],
+                            'additionalProperties' => false,
+                            'properties' => [
+                                'problem_clarity' => ['type' => 'integer'],
+                                'demand_evidence' => ['type' => 'integer'],
+                                'small_team_feasibility' => ['type' => 'integer'],
+                                'monetization_potential' => ['type' => 'integer'],
+                                'total' => ['type' => 'integer'],
+                            ],
+                            'required' => [
+                                'problem_clarity',
+                                'demand_evidence',
+                                'small_team_feasibility',
+                                'monetization_potential',
+                                'total',
+                            ],
+                        ],
+                        'verdict' => ['type' => 'string', 'enum' => ['keep', 'skip']],
+                        'confidence' => ['type' => 'number'],
+                        'category' => [
+                            'type' => 'string',
+                            'enum' => ['hard-filtered', 'low-score', 'genuine-problem', 'tool-request', 'other'],
+                        ],
+                        'reasoning' => ['type' => 'string'],
+                    ],
+                    'required' => [
+                        'hard_filter_triggered',
+                        'hard_filter_reason',
+                        'evidence_type',
+                        'points',
+                        'verdict',
+                        'confidence',
+                        'category',
+                        'reasoning',
+                    ],
+                ],
+            ],
+        ];
     }
 }

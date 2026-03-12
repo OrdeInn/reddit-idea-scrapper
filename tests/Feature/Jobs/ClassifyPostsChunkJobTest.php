@@ -58,6 +58,7 @@ class ClassifyPostsChunkJobTest extends TestCase
             confidence: 0.9,
             category: Classification::CATEGORY_GENUINE_PROBLEM,
             reasoning: 'Great idea',
+            details: ['points' => ['total' => 8]],
             rawResponse: [],
         );
 
@@ -104,6 +105,11 @@ class ClassifyPostsChunkJobTest extends TestCase
             'verdict' => 'keep',
             'completed' => true,
         ]);
+
+        $storedResult = ClassificationResult::where('classification_id', $classification->id)
+            ->where('provider_name', 'test-provider-1')
+            ->first();
+        $this->assertSame(8, $storedResult?->details['points']['total']);
     }
 
     public function test_all_providers_succeed_triggers_process_results(): void
@@ -132,6 +138,7 @@ class ClassifyPostsChunkJobTest extends TestCase
             confidence: 0.9,
             category: Classification::CATEGORY_GENUINE_PROBLEM,
             reasoning: 'Great idea',
+            details: ['points' => ['total' => 8]],
             rawResponse: [],
         );
 

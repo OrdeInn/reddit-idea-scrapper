@@ -9,6 +9,7 @@ class ClassificationResponse
         public readonly float $confidence,
         public readonly string $category,
         public readonly string $reasoning,
+        public readonly array $details,
         public readonly array $rawResponse,
     ) {}
 
@@ -37,11 +38,19 @@ class ClassificationResponse
         $reasoning = $json['reasoning'] ?? '';
         $reasoning = is_string($reasoning) ? $reasoning : '';
 
+        $details = [
+            'hard_filter_triggered' => (bool) ($json['hard_filter_triggered'] ?? false),
+            'hard_filter_reason' => is_string($json['hard_filter_reason'] ?? null) ? $json['hard_filter_reason'] : null,
+            'points' => is_array($json['points'] ?? null) ? $json['points'] : null,
+            'evidence_type' => is_string($json['evidence_type'] ?? null) ? $json['evidence_type'] : null,
+        ];
+
         return new self(
             verdict: $verdict,
             confidence: $confidence,
             category: $category,
             reasoning: $reasoning,
+            details: $details,
             rawResponse: $rawResponse,
         );
     }
@@ -72,6 +81,7 @@ class ClassificationResponse
             'confidence' => $this->confidence,
             'category' => $this->category,
             'reasoning' => $this->reasoning,
+            'details' => $this->details,
             'raw_response' => $this->rawResponse,
         ];
     }

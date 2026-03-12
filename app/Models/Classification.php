@@ -164,6 +164,16 @@ class Classification extends Model
     }
 
     /**
+     * If fully completed providers disagree on verdict, keep it as borderline regardless of score.
+     *
+     * @param Collection<ClassificationResult> $results
+     */
+    public static function hasProviderDisagreement(Collection $results): bool
+    {
+        return $results->pluck('verdict')->filter()->unique()->count() > 1;
+    }
+
+    /**
      * Determine the final decision based on consensus score.
      */
     public static function determineFinalDecision(
@@ -194,6 +204,16 @@ class Classification extends Model
             return;
         }
 
+        $this->combined_score = self::calculateConsensusScore($completedResults);
+
+        if (self::hasProviderDisagreement($completedResults)) {
+            $this->final_decision = self::DECISION_BORDERLINE;
+            $this->classified_at = now();
+            $this->save();
+
+            return;
+        }
+
         // Check shortcut rules first
         $shortcutThreshold = (float) config('llm.classification.shortcut_confidence', 0.8);
         $shortcutDecision = self::checkShortcutRule($completedResults, $shortcutThreshold);
@@ -205,7 +225,6 @@ class Classification extends Model
             $keepThreshold = (float) config('llm.classification.consensus_threshold_keep', 0.6);
             $discardThreshold = (float) config('llm.classification.consensus_threshold_discard', 0.4);
 
-            $this->combined_score = self::calculateConsensusScore($completedResults);
             $this->final_decision = self::determineFinalDecision(
                 $this->combined_score,
                 $keepThreshold,
@@ -235,6 +254,7 @@ class Classification extends Model
                 'confidence'   => $result->confidence,
                 'category'     => $result->category,
                 'reasoning'    => $result->reasoning,
+                'details'      => $result->details,
                 'completed'    => (bool) $result->completed,
             ];
         }

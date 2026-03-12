@@ -158,7 +158,7 @@ class Post extends Model
     }
 
     /**
-     * Scope for posts that passed classification and need extraction.
+     * Scope for posts that were kept and need extraction.
      */
     public function scopeNeedsExtraction(Builder $query)
     {

@@ -113,7 +113,7 @@ class ExtractIdeasJob implements ShouldQueue
             return;
         }
 
-        // Collect post IDs needing extraction (keep/borderline classification)
+        // Collect post IDs needing extraction (keep + borderline classifications)
         $postIds = $scan->posts()->needsExtraction()->pluck('id')->toArray();
         $postsCount = count($postIds);
 

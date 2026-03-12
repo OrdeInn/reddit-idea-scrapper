@@ -19,12 +19,14 @@ class ClassificationResult extends Model
         'confidence',
         'category',
         'reasoning',
+        'details',
         'completed',
         'completed_at',
     ];
 
     protected $casts = [
         'confidence' => 'float',
+        'details' => 'array',
         'completed' => 'boolean',
         'completed_at' => 'datetime',
     ];

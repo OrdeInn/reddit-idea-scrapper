@@ -197,6 +197,34 @@ class ClassificationConsensusTest extends TestCase
         $this->assertEquals(Classification::DECISION_DISCARD, Classification::determineFinalDecision(0.0));
     }
 
+    public function test_process_results_marks_disagreement_as_borderline(): void
+    {
+        config([
+            'llm.classification.consensus_threshold_keep' => 0.6,
+            'llm.classification.consensus_threshold_discard' => 0.4,
+            'llm.classification.shortcut_confidence' => 0.8,
+        ]);
+
+        $classification = Classification::factory()->create([
+            'expected_provider_count' => 2,
+        ]);
+
+        ClassificationResult::factory()->keep()->forProvider('provider-1')->create([
+            'classification_id' => $classification->id,
+            'confidence' => 0.95,
+        ]);
+        ClassificationResult::factory()->skip()->forProvider('provider-2')->create([
+            'classification_id' => $classification->id,
+            'confidence' => 0.2,
+        ]);
+
+        $classification->processResults();
+        $classification->refresh();
+
+        $this->assertEquals(Classification::DECISION_BORDERLINE, $classification->final_decision);
+        $this->assertEqualsWithDelta(0.475, $classification->combined_score, 0.001);
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------

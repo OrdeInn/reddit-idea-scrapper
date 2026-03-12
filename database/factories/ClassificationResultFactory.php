@@ -23,6 +23,7 @@ class ClassificationResultFactory extends Factory
             'confidence' => null,
             'category' => null,
             'reasoning' => null,
+            'details' => null,
             'completed' => false,
             'completed_at' => null,
         ];

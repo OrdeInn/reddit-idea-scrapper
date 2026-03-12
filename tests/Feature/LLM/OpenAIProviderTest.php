@@ -68,6 +68,16 @@ class OpenAIProviderTest extends TestCase
                         'message' => [
                             'role' => 'assistant',
                             'content' => json_encode([
+                                'hard_filter_triggered' => false,
+                                'hard_filter_reason' => null,
+                                'evidence_type' => 'repeated-pain',
+                                'points' => [
+                                    'problem_clarity' => 3,
+                                    'demand_evidence' => 2,
+                                    'small_team_feasibility' => 2,
+                                    'monetization_potential' => 2,
+                                    'total' => 9,
+                                ],
                                 'verdict' => 'keep',
                                 'confidence' => 0.85,
                                 'category' => 'genuine-problem',
@@ -93,6 +103,7 @@ class OpenAIProviderTest extends TestCase
         $this->assertEquals(0.85, $response->confidence);
         $this->assertEquals('genuine-problem', $response->category);
         $this->assertNotEmpty($response->reasoning);
+        $this->assertSame('repeated-pain', $response->details['evidence_type']);
     }
 
     public function test_handles_malformed_json_gracefully(): void
@@ -141,18 +152,35 @@ class OpenAIProviderTest extends TestCase
         $this->assertStringContainsString('filtered', $response->reasoning);
     }
 
-    public function test_uses_json_mode(): void
+    public function test_uses_strict_json_schema(): void
     {
         Http::fake(function ($request) {
             $body = json_decode($request->body(), true);
             $this->assertArrayHasKey('response_format', $body);
-            $this->assertEquals(['type' => 'json_object'], $body['response_format']);
+            $this->assertEquals('json_schema', $body['response_format']['type']);
+            $this->assertTrue($body['response_format']['json_schema']['strict']);
+            $this->assertEquals('classification_result', $body['response_format']['json_schema']['name']);
 
             return Http::response([
                 'choices' => [
                     [
                         'message' => [
-                            'content' => json_encode(['verdict' => 'skip', 'confidence' => 0.3, 'category' => 'other', 'reasoning' => 'Not relevant']),
+                            'content' => json_encode([
+                                'hard_filter_triggered' => false,
+                                'hard_filter_reason' => null,
+                                'evidence_type' => 'op-only',
+                                'points' => [
+                                    'problem_clarity' => 2,
+                                    'demand_evidence' => 1,
+                                    'small_team_feasibility' => 1,
+                                    'monetization_potential' => 1,
+                                    'total' => 5,
+                                ],
+                                'verdict' => 'skip',
+                                'confidence' => 0.3,
+                                'category' => 'other',
+                                'reasoning' => 'Not relevant',
+                            ]),
                         ],
                         'finish_reason' => 'stop',
                     ],
@@ -419,7 +447,7 @@ class OpenAIProviderTest extends TestCase
             $body = json_decode($request->body(), true);
             $this->assertCount(2, $body['messages']);
             $this->assertEquals('system', $body['messages'][0]['role']);
-            $this->assertStringContainsString('classification assistant', $body['messages'][0]['content']);
+            $this->assertStringContainsString('precision-first classification assistant', $body['messages'][0]['content']);
             $this->assertEquals('user', $body['messages'][1]['role']);
 
             return Http::response([

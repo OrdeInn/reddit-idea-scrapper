@@ -124,7 +124,7 @@ return [
             'class' => App\Services\LLM\OpenAIProvider::class,
             'api_key' => env('OPENAI_API_KEY', ''),
             'model' => 'gpt-5-mini-2025-08-07',
-            'max_tokens' => 1024,
+            'max_tokens' => 1600,
             'temperature' => 0.3,
             'display_name' => 'GPT-5 Mini',
             'vendor' => 'openai',
